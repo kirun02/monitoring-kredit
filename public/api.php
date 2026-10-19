@@ -6,9 +6,6 @@ require __DIR__ . '/lib.php';
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
 
-/** Rupiah penuh, mis. 'Rp 1.234.567.890' */
-function rp($v): string { return 'Rp ' . fmt_int($v); }
-
 try {
     echo json_encode(build_dashboard(), JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
 } catch (Throwable $e) {
@@ -152,6 +149,7 @@ FROM rc GROUP BY kode_ao";
         $c = $r['npl_pct'] >= 5 ? 'bad' : ($r['npl_pct'] >= 3 ? 'muted' : 'good');
         $dc = $r['d_ckpn'];
         $rowsOut[] = [
+            'kode' => (string)$r['kode_ao'],
             'ao' => $r['nama_ao'] ?: $r['kode_ao'],
             'debitur' => fmt_int($r['debitur']),
             'out' => fmt_int($r['outstanding']),
@@ -180,8 +178,12 @@ FROM rc GROUP BY kode_ao";
         array_unshift($dates, ['v' => $cur['tgl_posisi'], 'l' => date('d M Y', strtotime($cur['tgl_posisi']))]);
     }
 
+    $gerak = $hasPrv ? kolek_gerak((int)$cur['id'], (int)$prvId) : null;
+    $aging = aging_set((int)$cur['id'], $hasPrv ? (int)$prvId : null);
+
     return [
         'empty' => false,
+        'batch' => (int)$cur['id'],
         'banding' => $banding,
         'tgl' => $cur['tgl_posisi'],
         'periode' => $cur['periode'],
@@ -198,6 +200,38 @@ FROM rc GROUP BY kode_ao";
         ],
         'trend' => $trend,
         'kolek' => $kolekOut,
+        'gerak' => $gerak,
+        'aging' => $aging,
         'rows' => $rowsOut,
     ];
+}
+
+/** Aging tunggakan menurut hari_tung, dibandingkan dengan pembanding (jika ada). */
+function aging_set(int $cur, ?int $prv): array
+{
+    $names = ['Lancar (0 hari)', '1–30 hari', '31–60 hari', '61–90 hari', 'Lebih dari 90 hari'];
+    $get = function (int $id): array {
+        $a = array_fill(0, 5, ['n' => 0, 'nom' => 0.0]);
+        $sql = 'SELECT CASE WHEN COALESCE(hari_tung, 0) <= 0 THEN 0 WHEN hari_tung <= 30 THEN 1
+                            WHEN hari_tung <= 60 THEN 2 WHEN hari_tung <= 90 THEN 3 ELSE 4 END AS b,
+                       COUNT(*) AS n, SUM(bakidebet) AS nom
+                FROM nominatif WHERE batch_id = ? GROUP BY 1';
+        foreach (q($sql, [$id])->fetchAll() as $r) $a[(int)$r['b']] = ['n' => (int)$r['n'], 'nom' => (float)$r['nom']];
+        return $a;
+    };
+    $c = $get($cur); $p = $prv !== null ? $get($prv) : null;
+    $tot = 0.0; foreach ($c as $x) $tot += $x['nom']; $tot = $tot ?: 1;
+
+    $rows = [];
+    foreach ($c as $i => $x) {
+        $d = $p === null ? null : $x['nom'] - $p[$i]['nom'];
+        $dn = $p === null ? null : $x['n'] - $p[$i]['n'];
+        $dd = dlt($d, $d === null ? '' : fmt_int(abs($d)), $i !== 0);       // lancar naik = bagus, sisanya naik = jelek
+        $rows[] = ['i' => $i, 'label' => $names[$i], 'rawan' => $i === 3,
+                   'debitur' => fmt_int($x['n']), 'nominal' => fmt_int($x['nom']),
+                   'pct' => pct($x['nom'] * 100 / $tot, 1) . '%', 'w' => max($x['nom'] * 100 / $tot, 0.8),
+                   'dDebitur' => $dn === null ? '–' : ($dn > 0 ? '+' : '') . fmt_int($dn),
+                   'd' => $dd];
+    }
+    return $rows;
 }

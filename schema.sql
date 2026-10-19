@@ -24,3 +24,11 @@ CREATE TABLE IF NOT EXISTS nominatif (
 );
 CREATE INDEX IF NOT EXISTS ix_nom_batch_ao ON nominatif (batch_id, kode_ao);
 CREATE INDEX IF NOT EXISTS ix_nom_batch_norek ON nominatif (batch_id, norek);
+
+
+**data nasabah**
+
+SELECT cif, namadb, alamatdb || ',' 
+|| trim((select nmdesa from desa where kdkab=mn.dati2db and kdcam=mn.camat and kddesa=mn.desa )) || ',' 
+|| trim((select nacam from camat where kdkab=mn.dati2db and kdcam=mn.camat)) || ',' 
+|| trim((select nama from dati2 where kode=mn.dati2db)) AS alamat_lengkap FROM mnasabah mn;

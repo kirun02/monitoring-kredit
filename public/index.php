@@ -10,7 +10,7 @@ page_head('Monitoring kredit', 'dash');
 <script src="dt-id.js"></script>
 <script>
 (function () {
-  var box = document.getElementById('dash'), seq = 0, aoDt = null, state = { banding: 'kemarin', tgl: '' };
+  var box = document.getElementById('dash'), seq = 0, aoDt = null, state = { banding: 'kemarin', tgl: '', batch: 0 };
 
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
@@ -55,6 +55,30 @@ page_head('Monitoring kredit', 'dash');
       + '<circle cx="' + last[0] + '" cy="' + last[1] + '" r="5" fill="#0F5F57"/></svg>';
   }
 
+  function debUrl(o) { return 'nasabah.php?' + new URLSearchParams(o).toString(); }
+
+  function gerakCard(d) {
+    var g = d.gerak, url = 'pergerakan.php?' + new URLSearchParams({ tgl: d.tgl, banding: d.banding }).toString();
+    var h = '<div class="card" style="flex:1 1 420px"><div style="display:flex;justify-content:space-between;gap:8px;margin-bottom:12px">'
+      + '<b>Pergerakan kolek</b><span class="muted">vs ' + esc(d.bandingNama) + '</span></div>';
+    if (!g) return h + '<p class="muted">Pembanding belum tersedia, jadi pergerakan kolek belum bisa dihitung.</p></div>';
+    return h + '<div style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:12px">'
+      + '<div style="flex:1 1 160px"><div class="muted">Masuk NPL (kolek 1-2 ke 3-5)</div><div class="bad"><b>' + esc(g.masuk.n) + ' debitur</b></div><div class="n">' + esc(g.masuk.nom) + '</div></div>'
+      + '<div style="flex:1 1 160px"><div class="muted">Keluar NPL (kolek 3-5 ke 1-2)</div><div class="good"><b>' + esc(g.keluar.n) + ' debitur</b></div><div class="n">' + esc(g.keluar.nom) + '</div></div></div>'
+      + '<a class="btn" href="' + esc(url) + '">Lihat detail dan riwayat harian →</a></div>';
+  }
+
+  function agingCard(d) {
+    return '<div class="card" style="flex:1 1 380px"><div style="display:flex;justify-content:space-between;gap:8px;margin-bottom:12px">'
+      + '<b>Aging tunggakan</b><span class="muted">menurut hari tunggak · Δ vs ' + esc(d.bandingNama) + '</span></div>'
+      + '<table style="width:100%"><thead><tr><th>Kelompok</th><th>Debitur</th><th>Bakidebet (Rp)</th><th>% outstanding</th><th>Δ bakidebet</th></tr></thead><tbody>'
+      + d.aging.map(function (r) {
+          return '<tr><td><a href="' + esc(debUrl({ tgl: d.tgl, aging: r.i })) + '">' + esc(r.label) + '</a>' + (r.rawan ? ' <span title="Mendekati batas NPL">⚠</span>' : '') + '</td><td>' + esc(r.debitur) + '</td><td>' + esc(r.nominal) + '</td><td>' + esc(r.pct)
+            + '</td><td>' + dl(r.d) + ' <span class="muted">(' + esc(r.dDebitur) + ' debitur)</span></td></tr>';
+        }).join('')
+      + '</tbody></table><div class="muted" style="margin-top:8px">⚠ = kelompok yang paling dekat dengan batas NPL. Klik nama kelompok untuk melihat debiturnya.</div></div>';
+  }
+
   function render(d) {
     if (aoDt) { aoDt.destroy(); aoDt = null; }
     if (d.empty) {
@@ -62,7 +86,7 @@ page_head('Monitoring kredit', 'dash');
         + '<a class="btn primary" href="upload.php">Upload nominatif</a></div>';
       return;
     }
-    state = { banding: d.banding, tgl: d.tgl };
+    state = { banding: d.banding, tgl: d.tgl, batch: d.batch };
     var k = d.kpi, h = '';
 
     h += '<div class="row" style="align-items:center;justify-content:space-between">'
@@ -101,14 +125,16 @@ page_head('Monitoring kredit', 'dash');
         }).join('')
       + '</div></div></div>';
 
+    h += '<div class="row">' + gerakCard(d) + agingCard(d) + '</div>';
+
     h += '<div class="card"><div style="display:flex;flex-wrap:wrap;gap:12px;justify-content:space-between;margin-bottom:8px"><b>Kinerja per Account Officer</b>'
-      + '<span class="muted">Diurutkan dari NPL tertinggi · semua angka dalam Rupiah · CKPN dibandingkan dengan ' + esc(d.bandingNama) + '</span></div>'
+      + '<span class="muted">Diurutkan dari NPL tertinggi · klik nama AO untuk membuka daftar debiturnya · semua angka dalam Rupiah · CKPN dibandingkan dengan ' + esc(d.bandingNama) + '</span></div>'
       + '<div class="scroll"><table id="aoTable" style="width:100%"><thead><tr><th>AO</th><th>Debitur</th><th>Outstanding</th><th>NPL (Rp)</th><th>NPL %</th><th>Tagihan</th><th>Realisasi</th>'
       + '<th>Pencapaian</th><th>CKPN</th><th>Δ vs ' + esc(d.bandingNama) + '</th><th>Turun krn angsuran</th></tr></thead><tbody>'
       + d.rows.map(function (r) {
           var w = r.raw;
           function td(txt, raw, cls) { return '<td data-order="' + raw + '"' + (cls ? ' class="' + esc(cls) + '"' : '') + '>' + txt + '</td>'; }
-          return '<tr><td>' + esc(r.ao) + '</td>' + td(esc(r.debitur), w.debitur) + td(esc(r.out), w.out) + td(esc(r.npl), w.npl)
+          return '<tr><td><a href="' + esc(debUrl({ ao: r.kode, tgl: d.tgl })) + '">' + esc(r.ao) + '</a></td>' + td(esc(r.debitur), w.debitur) + td(esc(r.out), w.out) + td(esc(r.npl), w.npl)
             + td('<b>' + esc(r.nplPct) + '</b>', w.nplPct, r.nplCls) + td(esc(r.tagihan), w.tagihan) + td(esc(r.real), w.real)
             + td(esc(r.ach), w.ach) + td(esc(r.ckpn), w.ckpn) + td(esc(r.dTxt), w.d, r.dCls)
             + td(esc(r.turun), w.turun, 'good') + '</tr>';

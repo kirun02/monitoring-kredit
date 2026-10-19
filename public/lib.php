@@ -7,10 +7,20 @@ const NUMF = ['plafon', 'bakidebet', 'tot_bunga', 'kw_bln_pkk', 'kw_bln_bg', 't_
               'byr_blnpkk', 'byr_blnbg', 'ppka', 'ckpn'];
 const INTF = ['hari_tung', 'kolek'];
 const DATEF = ['tgl_pinjam', 'tgl_tempo'];
+// Kolom opsional: kalau tidak ada di Excel, upload tetap jalan dan isinya kosong.
+// Nilai = nama header yang dikenali (huruf kecil), dipakai urut dari yang pertama ketemu.
+const OPTF = ['nama_nasabah', 'alamat'];
+const OPT_ALIAS = [
+    'nama_nasabah' => ['namadb', 'nama_nasabah', 'nama nasabah', 'nama_debitur', 'nama debitur', 'nama_nsb', 'nasabah', 'debitur', 'nama'],
+    'alamat'       => ['alamatdb', 'alamat', 'alamat_nasabah', 'alamat nasabah', 'alamat_debitur', 'alamat debitur', 'alamat_ktp', 'alamat ktp'],
+];
+// Kolek 3 dimulai di atas sekian hari tunggak. Sesuaikan dengan kebijakan kantor (dipakai menu Prioritas tagih).
+const BATAS_NPL_HARI = 90;
 const KOLEK_NAMA = [1 => 'Kolek 1 (Lancar)', 2 => 'Kolek 2 (DPK)', 3 => 'Kolek 3 (Kurang Lancar)',
                     4 => 'Kolek 4 (Diragukan)', 5 => 'Kolek 5 (Macet)'];
 
-function cols(): array { return array_merge(TEXT, NUMF, INTF, DATEF); }
+function cols(): array { return array_merge(TEXT, NUMF, INTF, DATEF, OPTF); }
+function cols_wajib(): array { return array_merge(TEXT, NUMF, INTF, DATEF); }
 
 function db(): PDO {
     static $pdo = null;
@@ -21,6 +31,12 @@ function db(): PDO {
             [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC]);
         if (!$pdo->query("SELECT to_regclass('public.upload_batch')")->fetchColumn()) {
             $pdo->exec(file_get_contents(__DIR__ . '/../schema.sql'));
+        }
+        // migrasi: kolom nama_nasabah & alamat (tidak berbuat apa-apa kalau sudah ada)
+        $ada = (int)$pdo->query("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = current_schema()
+                                 AND table_name = 'nominatif' AND column_name IN ('nama_nasabah', 'alamat')")->fetchColumn();
+        if ($ada < 2) {
+            $pdo->exec('ALTER TABLE nominatif ADD COLUMN IF NOT EXISTS nama_nasabah character(100) DEFAULT \'\', ADD COLUMN IF NOT EXISTS alamat text');
         }
     }
     return $pdo;
@@ -48,6 +64,9 @@ function page_head(string $title, string $active): void {
        . '<title>' . h($title) . '</title><link rel="stylesheet" href="style.css"></head><body>'
        . '<header class="top"><a class="brand" href="index.php">Monitoring Kredit</a><nav>'
        . '<a href="index.php" class="' . ($active === 'dash' ? 'on' : '') . '">Dashboard</a>'
+       . '<a href="pergerakan.php" class="' . ($active === 'gerak' ? 'on' : '') . '">Pergerakan</a>'
+       . '<a href="prioritas.php" class="' . ($active === 'prioritas' ? 'on' : '') . '">Prioritas tagih</a>'
+       . '<a href="nasabah.php" class="' . ($active === 'debitur' ? 'on' : '') . '">Debitur</a>'
        . '<a href="upload.php" class="' . ($active === 'upload' ? 'on' : '') . '">Upload nominatif</a></nav></header><main>';
     foreach ($flashes as [$c, $m]) echo '<div class="flash ' . h($c) . '">' . h($m) . '</div>';
 }
@@ -141,14 +160,18 @@ function xlsx_rows(string $path) {
 
 /** Baca sheet pertama; kembalikan baris dengan urutan nilai sesuai cols().
  *  Satu norek hanya diambil sekali (baris pertama); jumlah baris dobel yang dibuang dikembalikan lewat $dobel. */
-function parse_excel(string $path, int &$dobel = 0): array {
-    $idx = null; $out = []; $seen = []; $dobel = 0;
+function parse_excel(string $path, int &$dobel = 0, array &$optAda = []): array {
+    $idx = null; $out = []; $seen = []; $dobel = 0; $optAda = []; $optIdx = [];
     foreach (xlsx_rows($path) as $c) {
         if ($idx === null) {
             $idx = [];
             foreach ($c as $i => $name) $idx[strtolower(trim((string)$name))] = $i;
-            $miss = array_diff(cols(), array_keys($idx));
+            $miss = array_diff(cols_wajib(), array_keys($idx));
             if ($miss) throw new RuntimeException('kolom tidak ditemukan: ' . implode(', ', $miss));
+            foreach (OPTF as $k) {
+                $optIdx[$k] = null;
+                foreach (OPT_ALIAS[$k] as $alias) if (isset($idx[$alias])) { $optIdx[$k] = $idx[$alias]; $optAda[] = $k; break; }
+            }
             continue;
         }
         $g = function (string $k) use ($c, $idx) { return $c[$idx[$k]] ?? null; };
@@ -161,6 +184,11 @@ function parse_excel(string $path, int &$dobel = 0): array {
         foreach (NUMF as $k) $r[] = sprintf('%.2F', cell_num($g($k)));
         foreach (INTF as $k) $r[] = (string)(int)cell_num($g($k));
         foreach (DATEF as $k) $r[] = cell_date($g($k));
+        foreach (OPTF as $k) {
+            $t = $optIdx[$k] === null ? '' : cell_text($c[$optIdx[$k]] ?? null);
+            if ($k === 'nama_nasabah') $t = (string)preg_replace('/^(.{0,100}).*$/su', '$1', $t); // kolom character(100): potong 100 karakter
+            $r[] = $t === '' ? null : $t;
+        }
         $out[] = $r;
     }
     return $out;
@@ -179,4 +207,94 @@ function copy_rows(PDO $pdo, int $bid, array $rows): void {
 
 function set_baseline(string $periode, int $bid): void {
     q('INSERT INTO periode (periode, baseline_batch_id) VALUES (?, ?) ON CONFLICT (periode) DO UPDATE SET baseline_batch_id = EXCLUDED.baseline_batch_id', [$periode, $bid]);
+}
+
+// ---------- pembantu bersama (Pergerakan, Prioritas tagih, Debitur) ----------
+/** Rupiah penuh, mis. 'Rp 1.234.567.890' */
+function rp($v): string { return 'Rp ' . fmt_int($v); }
+
+/** Batch posisi untuk tanggal tertentu (harian); kosong = terbaru. Cadangan: batch apa pun yang terbaru. */
+function batch_posisi(string $tgl): ?array {
+    if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $tgl)) $tgl = '';
+    $r = q("SELECT * FROM upload_batch WHERE jenis = 'harian'" . ($tgl ? ' AND tgl_posisi = ?' : '') .
+           ' ORDER BY tgl_posisi DESC, id DESC LIMIT 1', $tgl ? [$tgl] : [])->fetch();
+    if (!$r) $r = q('SELECT * FROM upload_batch ORDER BY tgl_posisi DESC, id DESC LIMIT 1')->fetch();
+    return $r ?: null;
+}
+
+/** Daftar tanggal upload harian untuk dropdown (tanggal posisi $cur selalu ikut). */
+function tanggal_harian(array $cur): array {
+    $dates = [];
+    foreach (q("SELECT DISTINCT tgl_posisi FROM upload_batch WHERE jenis = 'harian' ORDER BY tgl_posisi DESC LIMIT 90")->fetchAll() as $t) {
+        $dates[] = ['v' => $t['tgl_posisi'], 'l' => date('d M Y', strtotime($t['tgl_posisi']))];
+    }
+    if (!in_array($cur['tgl_posisi'], array_column($dates, 'v'), true)) {
+        array_unshift($dates, ['v' => $cur['tgl_posisi'], 'l' => date('d M Y', strtotime($cur['tgl_posisi']))]);
+    }
+    return $dates;
+}
+
+/** Tentukan batch pembanding: 'kemarin', 'baseline', atau tanggal upload harian (Y-m-d). */
+function pembanding(array $cur, string $banding): array {
+    if ($banding !== 'baseline' && (!preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $banding, $m) || !checkdate((int)$m[2], (int)$m[3], (int)$m[1]))) {
+        $banding = 'kemarin';
+    }
+    if ($banding === $cur['tgl_posisi']) $banding = 'kemarin';
+    if ($banding === 'baseline') {
+        $id = q('SELECT baseline_batch_id FROM periode WHERE periode = ?', [$cur['periode']])->fetchColumn() ?: null;
+    } elseif ($banding === 'kemarin') {
+        $id = q("SELECT id FROM upload_batch WHERE jenis = 'harian' AND tgl_posisi < ? ORDER BY tgl_posisi DESC, id DESC LIMIT 1", [$cur['tgl_posisi']])->fetchColumn() ?: null;
+    } else {
+        $id = q("SELECT id FROM upload_batch WHERE jenis = 'harian' AND tgl_posisi = ? LIMIT 1", [$banding])->fetchColumn() ?: null;
+    }
+    return ['banding' => $banding, 'id' => $id === null ? null : (int)$id,
+            'nama' => in_array($banding, ['kemarin', 'baseline'], true) ? $banding : date('d/m/Y', strtotime($banding))];
+}
+
+/** Pergerakan kolek: debitur yang sama (norek) di posisi ini vs pembanding. */
+function kolek_gerak(int $cur, int $prv): array
+{
+    $moves = q('SELECT LEAST(GREATEST(p.kolek, 1), 5) AS dari, LEAST(GREATEST(c.kolek, 1), 5) AS ke,
+                       COUNT(*) AS debitur, SUM(c.bakidebet) AS nominal
+                FROM nominatif c JOIN nominatif p ON p.norek = c.norek AND p.batch_id = :prv
+                WHERE c.batch_id = :cur GROUP BY 1, 2', ['cur' => $cur, 'prv' => $prv])->fetchAll();
+
+    $list = []; $masuk = [0, 0.0]; $keluar = [0, 0.0];
+    foreach ($moves as $m) {
+        $d = (int)$m['dari']; $k = (int)$m['ke'];
+        if ($d === $k) continue;
+        $n = (int)$m['debitur']; $nom = (float)$m['nominal'];
+        $list[] = ['dari' => $d, 'ke' => $k, 'worse' => $k > $d, 'n' => $n, 'nom' => $nom];
+        if ($d <= 2 && $k >= 3) { $masuk[0] += $n; $masuk[1] += $nom; }
+        if ($d >= 3 && $k <= 2) { $keluar[0] += $n; $keluar[1] += $nom; }
+    }
+    usort($list, function ($a, $b) {
+        return [$b['worse'], $b['nom']] <=> [$a['worse'], $a['nom']]; // memburuk dulu, lalu nominal terbesar
+    });
+    $rows = [];
+    foreach ($list as $x) {
+        $rows[] = ['label' => 'Kolek ' . $x['dari'] . ' → Kolek ' . $x['ke'],
+                   'ket' => $x['worse'] ? 'Memburuk' : 'Membaik', 'cls' => $x['worse'] ? 'bad' : 'good',
+                   'debitur' => fmt_int($x['n']), 'nominal' => fmt_int($x['nom'])];
+    }
+
+    // debitur yang hanya ada di salah satu posisi
+    $baru = q('SELECT COUNT(*) AS n, COALESCE(SUM(c.bakidebet), 0) AS nom,
+                      COALESCE(SUM(c.bakidebet) FILTER (WHERE c.kolek >= 3), 0) AS npl
+               FROM nominatif c WHERE c.batch_id = :cur
+                 AND NOT EXISTS (SELECT 1 FROM nominatif p WHERE p.batch_id = :prv AND p.norek = c.norek)',
+              ['cur' => $cur, 'prv' => $prv])->fetch();
+    $hilang = q('SELECT COUNT(*) AS n, COALESCE(SUM(p.bakidebet), 0) AS nom,
+                        COALESCE(SUM(p.bakidebet) FILTER (WHERE p.kolek >= 3), 0) AS npl
+                 FROM nominatif p WHERE p.batch_id = :prv
+                   AND NOT EXISTS (SELECT 1 FROM nominatif c WHERE c.batch_id = :cur AND c.norek = p.norek)',
+                ['cur' => $cur, 'prv' => $prv])->fetch();
+
+    return [
+        'rows' => $rows,
+        'masuk' => ['n' => fmt_int($masuk[0]), 'nom' => rp($masuk[1])],
+        'keluar' => ['n' => fmt_int($keluar[0]), 'nom' => rp($keluar[1])],
+        'baru' => ['n' => fmt_int($baru['n']), 'nom' => rp($baru['nom']), 'npl' => rp($baru['npl'])],
+        'hilang' => ['n' => fmt_int($hilang['n']), 'nom' => rp($hilang['nom']), 'npl' => rp($hilang['npl'])],
+    ];
 }
