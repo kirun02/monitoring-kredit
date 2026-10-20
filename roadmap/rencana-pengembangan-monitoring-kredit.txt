@@ -1,0 +1,92 @@
+RENCANA PENGEMBANGAN - MONITORING KREDIT HARIAN
+================================================
+
+Semua usulan di bawah bisa dibangun dari kolom nominatif yang sudah ada,
+jadi belum perlu data tambahan dari CBS. Diurutkan dari manfaat terbesar.
+
+
+TAHAP 2: MENJAWAB "KENAPA NPL NAIK ATAU TURUN"
+----------------------------------------------
+1. Pergerakan kolek
+   Tabel jumlah debitur dan nominal yang pindah kolek (1 ke 2, 2 ke 3, dst,
+   atau sebaliknya) dibanding kemarin atau baseline. Biasanya tidak ada di
+   CBS dan paling cepat menunjukkan dari mana NPL bertambah.
+
+2. Daftar debitur per AO
+   Klik nama AO di dashboard, muncul debitur-debiturnya. Bisa diurutkan
+   dari hari tunggakan terbanyak atau CKPN terbesar.
+
+3. Aging tunggakan
+   Kelompok berdasarkan hari_tung: lancar, 1-30, 31-60, 61-90, lebih dari
+   90 hari. Peringatan dini sebelum debitur masuk NPL.
+
+4. Menu input target
+   Target NPL dan pencapaian per AO diinput manual, lalu dibandingkan
+   dengan data dari Excel atau data yang sudah di upload.
+
+
+TAHAP 3: MEMBANTU PENAGIHAN
+---------------------------
+5. Daftar prioritas tagih
+   Debitur kolek 2 yang hampir masuk kolek 3 (misalnya tunggakan 60-90
+   hari), plus total nominal yang akan menambah NPL kalau tidak tertagih.
+   Jadi daftar kerja harian untuk AO.
+
+6. Jatuh tempo
+   Debitur yang jatuh tempo bulan ini dan bulan depan (dari tgl_tempo).
+
+7. Catatan tindak lanjut
+   Input manual per debitur: hasil kunjungan dan tanggal janji bayar.
+   Dashboard menampilkan janji bayar yang jatuh tempo hari ini atau yang
+   diingkari.
+
+8. Proyeksi akhir bulan
+   Perkiraan pencapaian akhir bulan dari kecepatan pembayaran sampai hari
+   ini.
+
+
+TAHAP 4: LAPORAN DAN KONTROL
+----------------------------
+9.  Export ke Excel atau PDF per AO untuk bahan rapat.
+10. Rasio CKPN terhadap NPL, dan CKPN per kolek.
+11. Konsentrasi NPL, misalnya 10 debitur terbesar menyumbang berapa persen
+    dari total NPL.
+12. Validasi saat upload: peringatan kalau jumlah debitur turun drastis,
+    ada nomor rekening dobel, atau total outstanding melompat tidak wajar.
+13. Login dan hak akses per cabang atau AO, kalau nanti dipakai lebih
+    banyak orang.
+
+
+SARAN URUTAN MULAI
+------------------
+Mulai dari: (1) pergerakan kolek, (2) daftar debitur per AO, (3) aging.
+Ketiganya tidak butuh input manual dan langsung mengubah dashboard dari
+sekadar ringkasan menjadi alat untuk mengambil keputusan.
+
+Catatan: pergerakan kolek dan tren baru terasa kalau data sudah terkumpul
+beberapa hari. Kalau masih punya nominatif bulan-bulan lalu, upload sebagai
+data harian atau baseline supaya tren dan perbandingan langsung terisi.
+
+
+PERTANYAAN PENENTU URUTAN
+-------------------------
+Laporan apa yang paling sering ditanyakan atasan atau dibahas di rapat
+kredit?
+- Kalau "kenapa NPL cabang naik"  -> pergerakan kolek didahulukan.
+- Kalau "siapa yang harus ditagih hari ini" -> daftar prioritas tagih
+  didahulukan.
+
+
+CATATAN TEKNIS YANG SUDAH DISEPAKATI
+------------------------------------
+- Stack: PHP 7 (XAMPP) + PostgreSQL 10, tanpa login (jaringan kantor saja).
+- Format file: .xlsx
+- NPL = bakidebet kolek 3, 4, 5 dibanding total bakidebet.
+- Tagihan = kw_bln_pkk + kw_bln_bg (dari baseline periode).
+- Realisasi = byr_blnpkk + byr_blnbg, hanya debitur yang punya tagihan
+  bulan itu. Pembayaran debitur jatuh tempo/menunggak ditampilkan terpisah.
+- Pembanding dashboard: kemarin atau baseline.
+- Baseline = nominatif awal bulan sebelum ada pembayaran; ditandai lewat
+  jenis upload dan periode, bukan tanggal file.
+- CKPN turun karena angsuran = debitur yang total bayarnya bertambah dan
+  CKPN-nya berkurang antara dua posisi.
