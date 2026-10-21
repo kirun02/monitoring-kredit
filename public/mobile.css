@@ -1,0 +1,109 @@
+/* mobile.css: tambahan responsif untuk Monitoring Kredit.
+   Dimuat SETELAH style.css (lihat lib.php dan login.php). Memakai variabel warna dari style.css.
+   CSS DataTables dimuat belakangan di dalam <main>, jadi selektor DataTables di bawah dibuat
+   lebih spesifik supaya menang. */
+
+/* ---------- Perapian kecil (semua ukuran layar) ---------- */
+html { -webkit-text-size-adjust: 100%; }
+#dash { display: flex; flex-direction: column; gap: 24px; }   /* kartu dashboard diberi jarak seperti halaman lain */
+label.f input {                                               /* kolom isian (login) senada dengan select */
+  height: 44px; padding: 0 12px; border: 1px solid #B8C6C2; border-radius: 8px;
+  background: #fff; font: inherit; color: var(--ink);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; scroll-behavior: auto !important; }
+}
+
+/* ---------- Tablet dan ponsel (<= 900px) ---------- */
+@media (max-width: 900px) {
+
+  main { padding: 20px 16px; gap: 20px; }
+  #dash { gap: 16px; }
+  h1 { font-size: 22px; line-height: 1.25; }
+  .card { padding: 16px; min-width: 0; }
+
+  /* Header: merek + akun di baris pertama, menu yang bisa digeser di baris kedua */
+  .top { gap: 0 12px; padding: 0 16px; }
+  .top .brand { padding: 12px 0; }
+  .top nav {
+    order: 3; flex: 1 0 100%;
+    overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none;
+  }
+  .top nav::-webkit-scrollbar { display: none; }
+  .top nav a { flex: none; padding: 12px 14px; }
+  .top nav ~ * { order: 2; }
+  .top nav + * { margin-left: auto; }
+
+  /* Baris kartu jadi satu kolom. style.css memberi .row>* flex-basis 240px dan beberapa kartu
+     punya flex:... di atribut style; pada kolom itu terbaca sebagai TINGGI, jadi harus ditimpa. */
+  .row { flex-direction: column; flex-wrap: nowrap; gap: 12px; align-items: stretch !important; }
+  .row > * { flex: none !important; min-width: 0; max-width: 100%; }
+  @supports selector(:has(*)) {
+    .row:has(> .kpi) { display: grid !important; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  }
+  .kpi .v { font-size: 24px; overflow-wrap: anywhere; }
+  .kpi .n { overflow-wrap: anywhere; }
+  .flash { overflow-wrap: anywhere; }
+
+  /* Kontrol form: 16px supaya iOS tidak memperbesar halaman saat fokus (tinggi 44px sudah dari style.css) */
+  select, input[type=date], input[type=month], label.f input { font-size: 16px; }
+  .f[style*="flex-direction:row"] { flex-direction: column !important; align-items: stretch !important; gap: 6px; }
+
+  /* Grafik tren NPL: teks di dalam SVG ikut mengecil, jadi beri lebar minimum dan biarkan kartunya bisa digeser */
+  .card > svg[role="img"] { min-width: 520px; }
+  @supports selector(:has(*)) {
+    .card:has(> svg[role="img"]) { overflow-x: auto; }
+  }
+
+  /* Tabel: geser ke samping, kolom pertama (nama) tetap terlihat.
+     Yang digeser hanya tabelnya, jadi kotak cari dan pagination DataTables tetap di tempat. */
+  .scroll { overflow: visible; }
+  .scroll table, .card > table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  div.scroll table.dataTable { width: 100% !important; max-width: 100% !important; }
+  .scroll table th:first-child, .scroll table td:first-child,
+  .card > table th:first-child, .card > table td:first-child {
+    position: sticky; left: 0; z-index: 1; background: var(--card); box-shadow: 1px 0 0 var(--line);
+  }
+  .scroll table thead th, .scroll table tbody td,
+  .card > table thead th, .card > table tbody td { padding: 8px 10px; font-size: 13px; }
+  #tblDeb tbody td:nth-child(2), #tblPrioritas tbody td:nth-child(2) {   /* kolom alamat boleh turun baris */
+    white-space: normal; min-width: 200px; text-align: left;
+  }
+
+  /* Kontrol bawaan DataTables */
+  div.dataTables_wrapper div.dataTables_length,
+  div.dataTables_wrapper div.dataTables_filter { float: none; text-align: left; margin: 0 0 8px; }
+  div.dataTables_wrapper div.dataTables_filter label { display: block; }
+  div.dataTables_wrapper div.dataTables_filter input {
+    width: 100%; margin: 6px 0 0; height: 44px; padding: 0 12px; font-size: 16px;
+    border: 1px solid #B8C6C2; border-radius: 8px;
+  }
+  div.dataTables_wrapper div.dataTables_info { float: none; text-align: center; padding-top: 8px; white-space: normal; }
+  div.dataTables_wrapper div.dataTables_paginate { float: none; text-align: center; padding-top: 6px; }
+  div.dataTables_wrapper div.dataTables_paginate a.paginate_button { padding: 8px 12px; min-width: 40px; }
+}
+
+/* Tablet: filter dua kolom */
+@media (min-width: 601px) and (max-width: 900px) {
+  .card > label.f { width: calc(50% - 8px); }
+}
+
+/* ---------- Ponsel (<= 600px) ---------- */
+@media (max-width: 600px) {
+  main { padding: 16px 12px; }
+  .card { padding: 14px; }
+
+  label.f { width: 100%; }
+  label.f select, label.f input { width: 100%; }
+  .card > .btn { width: 100%; justify-content: center; }
+  .seg { width: 100%; }
+  .seg a { flex: 1; justify-content: center; padding: 0 8px; }
+}
+
+/* ---------- Layar sempit (<= 480px): kartu KPI satu kolom supaya angka Rupiah tidak terpotong ---------- */
+@media (max-width: 480px) {
+  @supports selector(:has(*)) {
+    .row:has(> .kpi) { grid-template-columns: minmax(0, 1fr); }
+  }
+}
