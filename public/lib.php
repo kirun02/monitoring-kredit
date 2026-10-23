@@ -16,12 +16,16 @@ function redirect(string $to) { header('Location: ' . $to); exit; }
 function page_head(string $title, string $active): void {
     $flashes = $_SESSION['flash'] ?? []; unset($_SESSION['flash']);
     echo '<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
-       . '<title>' . h($title) . '</title><link rel="stylesheet" href="style.css"></head><body>'
+       . '<title>' . h($title) .'</title>'
+       . '<link rel="stylesheet" href="style.css">'
+       . '</head><body>'
        . '<header class="top"><a class="brand" href="index.php">Monitoring Kredit</a><nav>'
        . '<a href="index.php" class="' . ($active === 'dash' ? 'on' : '') . '">Dashboard</a>'
        . '<a href="pergerakan.php" class="' . ($active === 'gerak' ? 'on' : '') . '">Pergerakan</a>'
        . '<a href="prioritas.php" class="' . ($active === 'prioritas' ? 'on' : '') . '">Prioritas tagih</a>'
        . '<a href="nasabah.php" class="' . ($active === 'debitur' ? 'on' : '') . '">Debitur</a>'
+       . '<a href="kunjungan.php" class="' . ($active === 'kunjungan' ? 'on' : '') . '">Kunjungan</a>'
+       . '<a href="laporan_kunjungan.php" class="' . ($active === 'lapkun' ? 'on' : '') . '">Lap. Kunjungan</a>'
        . '<a href="upload.php" class="' . ($active === 'upload' ? 'on' : '') . '">Upload nominatif</a></nav></header><main>';
     foreach ($flashes as [$c, $m]) echo '<div class="flash ' . h($c) . '">' . h($m) . '</div>';
 }

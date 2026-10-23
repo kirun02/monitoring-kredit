@@ -11,6 +11,11 @@ label.f input {                                               /* kolom isian (lo
   background: #fff; font: inherit; color: var(--ink);
 }
 
+label.f textarea {                                            /* kolom isian panjang (form kunjungan) */
+  width: 100%; min-height: 110px; padding: 10px 12px; border: 1px solid #B8C6C2; border-radius: 8px;
+  background: #fff; font: inherit; color: var(--ink); resize: vertical;
+}
+
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; scroll-behavior: auto !important; }
 }
@@ -47,7 +52,7 @@ label.f input {                                               /* kolom isian (lo
   .flash { overflow-wrap: anywhere; }
 
   /* Kontrol form: 16px supaya iOS tidak memperbesar halaman saat fokus (tinggi 44px sudah dari style.css) */
-  select, input[type=date], input[type=month], label.f input { font-size: 16px; }
+  select, input[type=date], input[type=month], label.f input, label.f textarea { font-size: 16px; }
   .f[style*="flex-direction:row"] { flex-direction: column !important; align-items: stretch !important; gap: 6px; }
 
   /* Grafik tren NPL: teks di dalam SVG ikut mengecil, jadi beri lebar minimum dan biarkan kartunya bisa digeser */

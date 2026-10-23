@@ -1,83 +1,97 @@
 <?php
+// HOSTING: tidak menyentuh database. File .xlsx dipotong-potong dan dikirim ke API backend
+// (terenkripsi, bertanda tangan, sama seperti login dan dashboard); API yang membaca Excel dan menyimpan ke database.
 require __DIR__ . '/lib.php';
+require_once __DIR__ . '/api_client.php';
+
+const UPLOAD_BAGIAN = 1572864;   // 1,5 MB per kiriman ke API
 
 $ajax = ($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '') === 'fetch';
+$data = ($_GET['data'] ?? '') === '1';
 
-/** Selesai: balas JSON (AJAX) atau flash + redirect (form biasa / tanpa JavaScript). */
-function done(bool $ajax, string $cat, string $msg): void {
-    if ($ajax) {
-        header('Content-Type: application/json; charset=utf-8');
-        echo json_encode(['ok' => $cat === 'ok', 'msg' => $msg], JSON_UNESCAPED_UNICODE);
-        exit;
+/** Selesai: balas JSON untuk halaman (ok = true/false, msg = teks untuk pengguna). */
+function done(string $cat, string $msg): void {
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode(['ok' => $cat === 'ok', 'msg' => $msg], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
+/** Panggil API lalu rapikan hasilnya: [berhasil?, pesan, data]. */
+function api_aksi(string $jenis, array $isi): array {
+    $r = api_call($jenis, $isi);
+    if (($r['status'] ?? '') === 'success') {
+        return [true, (string)($r['data']['msg'] ?? ''), (array)($r['data'] ?? [])];
     }
-    flash($cat, $msg);
-    redirect('upload.php');
+    return [false, (string)($r['message'] ?? 'Gagal.'), []];
+}
+
+// ---------- hanya admin yang boleh mengunggah atau mengubah data ----------
+if ((string)(auth_user()['staff'] ?? '') !== 'admin') {
+    http_response_code(403);
+    if ($ajax || $data) {
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode(['ok' => false, 'msg' => 'Hanya admin yang boleh mengunggah nominatif.', 'data' => []]);
+    } else {
+        echo 'Halaman ini hanya untuk admin.';
+    }
+    exit;
 }
 
 // ---------- data riwayat untuk DataTables ----------
-if (($_GET['data'] ?? '') === '1') {
-    header('Content-Type: application/json; charset=utf-8');
-    header('Cache-Control: no-store');
-    $aktif = array_column(q('SELECT baseline_batch_id FROM periode')->fetchAll(), 'baseline_batch_id');
-    $data = [];
-    foreach (q('SELECT * FROM upload_batch ORDER BY tgl_posisi DESC, id DESC LIMIT 100')->fetchAll() as $b) {
-        $data[] = [
-            'id' => (int)$b['id'],
-            'tgl' => date('d/m/Y', strtotime($b['tgl_posisi'])), 'tgl_iso' => $b['tgl_posisi'],
-            'jenis' => ucfirst($b['jenis']), 'periode' => $b['periode'], 'nama_file' => $b['nama_file'],
-            'baris' => fmt_int($b['jumlah_baris']), 'baris_raw' => (int)$b['jumlah_baris'],
-            'aktif' => in_array($b['id'], $aktif),
-        ];
-    }
-    echo json_encode(['data' => $data], JSON_UNESCAPED_UNICODE);
-    exit;
+if ($data) {
+    api_proxy('upload_riwayat', []);          // API membalas {"data":[...]}; api_proxy meneruskannya apa adanya
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $act = $_POST['action'] ?? 'upload';
-    if ($act === 'baseline') {
-        $b = q('SELECT periode FROM upload_batch WHERE id = ?', [(int)$_POST['id']])->fetch();
-        if (!$b) done($ajax, 'err', 'Upload tidak ditemukan.');
-        set_baseline($b['periode'], (int)$_POST['id']);
-        done($ajax, 'ok', 'Baseline periode ' . $b['periode'] . ' diganti.');
-    }
-    if ($act === 'hapus') {
-        q('DELETE FROM upload_batch WHERE id = ?', [(int)$_POST['id']]);
-        done($ajax, 'ok', 'Upload dihapus.');
-    }
-    // upload file
-    $tgl = $_POST['tgl_posisi'] ?? ''; $jenis = $_POST['jenis'] ?? ''; $periode = $_POST['periode'] ?? '';
-    $f = $_FILES['file'] ?? null;
-    if (!$f || $f['error'] !== UPLOAD_ERR_OK || !$tgl || !$periode || !in_array($jenis, ['harian', 'baseline'], true)) {
-        done($ajax, 'err', 'Lengkapi file, tanggal posisi, jenis upload, dan periode tagihan. Ukuran file maksimal 64 MB.');
-    }
-    if (strtolower(pathinfo($f['name'], PATHINFO_EXTENSION)) !== 'xlsx') {
-        done($ajax, 'err', 'Format file harus .xlsx. Simpan ulang dari Excel dengan Save As .xlsx.');
-    }
     try {
-        $dobel = 0;
-        $optAda = [];
-        $rows = parse_excel($f['tmp_name'], $dobel, $optAda);
-        if (!$rows) throw new RuntimeException('tidak ada baris data');
+        if ($act === 'baseline' || $act === 'hapus') {
+            [$ok, $pesan] = api_aksi('upload_' . $act, ['id' => (int)($_POST['id'] ?? 0)]);
+            done($ok ? 'ok' : 'err', $pesan);
+        }
+
+        // ---------- upload file ----------
+        $tgl = (string)($_POST['tgl_posisi'] ?? ''); $jenis = (string)($_POST['jenis'] ?? ''); $periode = (string)($_POST['periode'] ?? '');
+        $f = $_FILES['file'] ?? null;
+        if (!$f || $f['error'] !== UPLOAD_ERR_OK || !$tgl || !$periode || !in_array($jenis, ['harian', 'baseline'], true)) {
+            done('err', 'Lengkapi file, tanggal posisi, jenis upload, dan periode tagihan. Ukuran file maksimal 64 MB.');
+        }
+        if (strtolower(pathinfo($f['name'], PATHINFO_EXTENSION)) !== 'xlsx') {
+            done('err', 'Format file harus .xlsx. Simpan ulang dari Excel dengan Save As .xlsx.');
+        }
+        $path = $f['tmp_name'];
+        $fh   = is_uploaded_file($path) ? fopen($path, 'rb') : false;
+        if (!$fh) done('err', 'File tidak bisa dibaca di server.');
+        if (fread($fh, 4) !== "PK\x03\x04") done('err', 'File bukan .xlsx yang valid.');   // .xlsx = arsip zip
+        rewind($fh);
+
+        session_write_close();                 // jangan menahan sesi selama unggah yang panjang
+        set_time_limit(0);
+        ignore_user_abort(true);
+
+        [$ok, $pesan, $d] = api_aksi('upload_mulai', [
+            'tgl_posisi' => $tgl, 'jenis' => $jenis, 'periode' => $periode,
+            'nama_file' => (string)$f['name'], 'ukuran' => (int)filesize($path),
+        ]);
+        if (!$ok || empty($d['id'])) done('err', $pesan ?: 'Gagal memulai unggah.');
+        $id = (string)$d['id'];
+
+        $no = 0;
+        while (!feof($fh)) {
+            $potong = fread($fh, UPLOAD_BAGIAN);
+            if ($potong === false || $potong === '') break;
+            [$ok, $pesan] = api_aksi('upload_bagian', ['id' => $id, 'no' => $no, 'b64' => base64_encode($potong)]);
+            if (!$ok) done('err', $pesan);
+            $no++;
+        }
+        fclose($fh);
+
+        [$ok, $pesan] = api_aksi('upload_selesai', ['id' => $id, 'sha256' => hash_file('sha256', $path), 'bagian' => $no]);
+        done($ok ? 'ok' : 'err', $pesan);
     } catch (Throwable $e) {
-        done($ajax, 'err', 'File tidak bisa dibaca: ' . $e->getMessage());
+        error_log('upload: ' . $e->getMessage());
+        done('err', 'Layanan penyimpanan tidak tersedia. Coba lagi nanti.');
     }
-    $pdo = db();
-    $pdo->beginTransaction();
-    try {
-        q('DELETE FROM upload_batch WHERE tgl_posisi = ? AND jenis = ?', [$tgl, $jenis]);
-        $bid = (int)q('INSERT INTO upload_batch (tgl_posisi, jenis, periode, nama_file, jumlah_baris) VALUES (?,?,?,?,?) RETURNING id',
-                      [$tgl, $jenis, $periode, $f['name'], count($rows)])->fetchColumn();
-        copy_rows($pdo, $bid, $rows);
-        if ($jenis === 'baseline') set_baseline($periode, $bid);
-        $pdo->commit();
-    } catch (Throwable $e) {
-        $pdo->rollBack();
-        done($ajax, 'err', 'Gagal menyimpan: ' . $e->getMessage());
-    }
-    done($ajax, 'ok', 'Tersimpan: ' . fmt_int(count($rows)) . ' debitur' . ($jenis === 'baseline' ? ', dijadikan baseline periode ' . $periode . '.' : '.')
-        . ($dobel ? ' (' . fmt_int($dobel) . ' baris dobel norek dibuang)' : '')
-        . (array_diff(OPTF, $optAda) ? ' Kolom ' . implode(' dan ', array_diff(OPTF, $optAda)) . ' tidak ditemukan di file ini, jadi kosong.' : ''));
 }
 
 page_head('Upload nominatif', 'upload');
@@ -91,6 +105,7 @@ page_head('Upload nominatif', 'upload');
 <div id="msg" aria-live="polite"></div>
 
 <form id="fUpload" class="card" method="post" enctype="multipart/form-data" style="display:flex;flex-wrap:wrap;gap:32px">
+    <input type="hidden" name="_csrf" value="<?= h(csrf_token()) ?>">
     <div style="flex:1 1 320px;display:flex;flex-direction:column;gap:12px;justify-content:center">
         <label class="f" for="file">File Excel nominatif (.xlsx)</label>
         <input id="file" type="file" name="file" accept=".xlsx" required style="font:inherit">
@@ -209,7 +224,7 @@ page_head('Upload nominatif', 'upload');
                     render: function(d, t, r) {
                         var b = '';
                         if (!r.aktif) b += '<button type="button" class="btn" data-act="baseline" data-id="' + r.id + '">Jadikan baseline</button>';
-                        b += '<button type="button" class="btn" data-act="hapus" data-id="' + r.id + '">Hapus</button>';
+                        b += '<button type="button" class="btn" data-act="hapus" data-id="' + r.id + '"' + (r.aktif ? ' data-aktif="1"' : '') + '>Hapus</button>';
                         return '<div style="display:flex;gap:8px">' + b + '</div>';
                     }
                 }
@@ -250,10 +265,14 @@ page_head('Upload nominatif', 'upload');
         // jadikan baseline / hapus
         $('#riwayat').on('click', 'button[data-act]', function() {
             var act = this.getAttribute('data-act');
-            if (act === 'hapus' && !confirm('Hapus upload ini beserta datanya?')) return;
+            if (act === 'hapus' && !confirm(this.getAttribute('data-aktif')
+                    ? 'Upload ini adalah BASELINE AKTIF. Kalau dihapus, pembanding "baseline" tidak tersedia sampai baseline baru ditentukan. Hapus beserta datanya?'
+                    : 'Hapus upload ini beserta datanya?')) return;
             var fd = new FormData();
             fd.append('action', act);
             fd.append('id', this.getAttribute('data-id'));
+            var tok = form.querySelector('input[name="_csrf"]'); // token dari formulir; tag <meta csrf-token> tidak selalu dicetak page_head()
+            fd.append('_csrf', tok ? tok.value : '');
             post(fd, this);
         });
 

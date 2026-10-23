@@ -84,6 +84,7 @@ function auth_login(array $u): void
         'username' => (string)($u['username'] ?? ''),
         'nama'     => (string)($u['nama'] ?? ''),
         'staff'    => (string)($u['staff'] ?? ''),
+        'kode_ao'  => (string)($u['kode_ao'] ?? ''),   // dipakai Input kunjungan untuk daftar debitur milik AO
     ];
     $_SESSION['login_at'] = $_SESSION['last'] = time();
     $_SESSION['ua']   = hash('sha256', (string)($_SERVER['HTTP_USER_AGENT'] ?? ''));
@@ -99,7 +100,7 @@ function auth_staff_boleh(string $staff): bool
 function auth_minta_json(): bool
 {
     return ($_GET['data'] ?? '') === '1'
-        || basename((string)($_SERVER['SCRIPT_NAME'] ?? '')) === 'api.php'
+        || strpos(basename((string)($_SERVER['SCRIPT_NAME'] ?? '')), 'api') === 0   // api.php, api_kunjungan.php, ...
         || ($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '') === 'fetch';
 }
 

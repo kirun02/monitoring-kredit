@@ -20,7 +20,7 @@ function api_cfg()
     return $c;
 }
 
-function api_http($path, array $headers, $body)
+function api_http($path, array $headers, $body, $timeout = null)
 {
     $c  = api_cfg();
     $ch = curl_init(rtrim($c['base_url'], '/') . $path);
@@ -29,7 +29,7 @@ function api_http($path, array $headers, $body)
         CURLOPT_POSTFIELDS     => $body,
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_HTTPHEADER     => $headers,
-        CURLOPT_TIMEOUT        => $c['timeout'] ?? 30,
+        CURLOPT_TIMEOUT        => $timeout ?: ($c['timeout'] ?? 30),
         CURLOPT_CONNECTTIMEOUT => 10,
         CURLOPT_SSL_VERIFYPEER => true,
         CURLOPT_SSL_VERIFYHOST => 2,
@@ -79,6 +79,12 @@ function api_path($jenis)
         }
         return $c['path_monitoring'];
     }
+
+    if (strpos($jenis, 'upload_') === 0) {
+        if (empty($c['path_upload'])) throw new RuntimeException('path_upload belum diatur di config.api.php');
+        return $c['path_upload'];
+    }
+
     return $c['path_data'];
 }
 
