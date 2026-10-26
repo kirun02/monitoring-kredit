@@ -8,9 +8,9 @@
  *
  * id_user SELALU diambil dari sesi login, tidak pernah dari browser (kalau tidak, siapa pun bisa mencatat atas nama AO lain).
  */
-require __DIR__ . '/lib.php';              // wajib login + CSRF untuk POST
+require __DIR__ . '/../lib.php';              // wajib login + CSRF untuk POST
 require_once __DIR__ . '/api_client.php';
-require_once __DIR__ . '/foto_lib.php';
+require_once __DIR__ . '/../foto_lib.php';
 date_default_timezone_set('Asia/Jakarta');
 
 function keluar($data, $kode = 200)

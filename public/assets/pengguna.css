@@ -1,0 +1,15 @@
+/* Tambahan untuk pengguna.php. Tab, baris form, tabel, dan tombol memakai karyawan.css, kunjungan.css, style.css. */
+.sw{display:inline-flex;align-items:center;gap:10px;cursor:pointer}
+.sw input{position:absolute;opacity:0;pointer-events:none}
+.sw-k{position:relative;width:42px;height:24px;border-radius:12px;background:#9aa7ad;flex:none}
+.sw-k::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#fff}
+.sw input:checked + .sw-k{background:#0f6b63}
+.sw input:checked + .sw-k::after{left:21px}
+.sw input:focus-visible + .sw-k{outline:3px solid #2b7fff;outline-offset:2px}
+@media (prefers-reduced-motion:no-preference){.sw-k,.sw-k::after{transition:all .15s}}
+
+.badge{display:inline-block;padding:2px 10px;border-radius:999px;font-size:.8rem;font-weight:600}
+.badge.on{background:#dcefe9;color:#0a4a44}
+.badge.off{background:#e5e9eb;color:#4a5961}
+
+.pg-form{max-width:640px}

@@ -3,11 +3,6 @@ require_once __DIR__ . '/../vendor/autoload.php';
 
 $dotenv = Dotenv\Dotenv::createImmutable(__DIR__ . '/../../../env');
 $dotenv->load();
-/*echo "<pre>";
-var_dump($_ENV['MON_API_KEY']); 
-var_dump($_ENV['MON_API_URL']);
-echo "</pre>";
-die();*/
 
 return [
     'base_url'          => $_ENV['MON_API_URL'],
@@ -17,6 +12,8 @@ return [
     'path_kunjungan'    => '/api_monitoring/kunjungan',
     'path_nasabah'      => '/api_monitoring/data_nasabah',
     'path_absensi'      => '/api_monitoring/absensi',
+    'path_karyawan'     => '/api_monitoring/karyawan',
+    'path_pengguna'     => '/api_monitoring/pengguna',
     'api_key'           => $_ENV['MON_API_KEY'],
     'secret_key'        => $_ENV['MON_API_SECRET'],
     'hmac_key'          => $_ENV['MON_API_HMAC'],

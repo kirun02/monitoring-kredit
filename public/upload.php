@@ -2,7 +2,7 @@
 // HOSTING: tidak menyentuh database. File .xlsx dipotong-potong dan dikirim ke API backend
 // (terenkripsi, bertanda tangan, sama seperti login dan dashboard); API yang membaca Excel dan menyimpan ke database.
 require __DIR__ . '/lib.php';
-require_once __DIR__ . '/api_client.php';
+require_once __DIR__ . '/api/api_client.php';
 
 const UPLOAD_BAGIAN = 1572864;   // 1,5 MB per kiriman ke API
 

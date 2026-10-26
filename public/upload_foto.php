@@ -3,7 +3,7 @@
 // Membalas {"path":"kunjungan/202610/<24 hex>.jpg"}; jalur itu dikirim ke API sebagai kolom 'foto' dan
 // ditampilkan lewat foto.php (wajib login). Wajib login dan token CSRF (lib.php).
 require __DIR__ . '/lib.php';
-require_once __DIR__ . '/api_client.php';     // api_cfg()
+require_once __DIR__ . '/api/api_client.php';     // api_cfg()
 
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');

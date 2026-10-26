@@ -1,7 +1,7 @@
 <?php
 // Menyajikan foto kunjungan (disimpan di luar folder web). Wajib login; AO hanya boleh melihat fotonya sendiri.
 require __DIR__ . '/lib.php';
-require_once __DIR__ . '/api_client.php';
+require_once __DIR__ . 'api/api_client.php';
 require_once __DIR__ . '/foto_lib.php';
 
 $u    = auth_user() ?? [];

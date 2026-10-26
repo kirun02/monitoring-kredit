@@ -1,0 +1,10 @@
+/* Tambahan untuk absensi.php. Class lain (fsec, fi, btn, foto-zone, lok, flash, card) dipakai dari kunjungan.css. */
+.absen-jam{font-size:clamp(2.8rem,14vw,4rem);font-weight:700;letter-spacing:-.02em;line-height:1;margin:6px 0 2px;font-variant-numeric:tabular-nums}
+.absen-tgl{margin:0;color:#5b6b73}
+
+.jenis{position:relative;display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.jenis input{position:absolute;opacity:0;pointer-events:none}
+.jenis label{display:block;text-align:center;padding:14px 10px;border:2px solid #ccd6d8;border-radius:10px;background:#fff;font-weight:600;cursor:pointer}
+.jenis input:checked + label.m{background:#0f6b63;border-color:#0f6b63;color:#fff}
+.jenis input:checked + label.p{background:#a85a0b;border-color:#a85a0b;color:#fff}
+.jenis input:focus-visible + label{outline:3px solid #2b7fff;outline-offset:2px}

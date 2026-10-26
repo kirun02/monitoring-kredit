@@ -2,7 +2,7 @@
 // Data halaman ini diambil dari API backend (tidak menyentuh database).
 require __DIR__ . '/lib.php';
 if (($_GET['data'] ?? '') === '1') {
-    require_once __DIR__ . '/api_client.php';
+    require_once __DIR__ . '/api/api_client.php';
     api_proxy('prioritas', ['tgl', 'ao', 'min']);
 }
 page_head('Prioritas tagih', 'prioritas');

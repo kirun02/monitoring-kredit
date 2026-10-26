@@ -9,14 +9,14 @@
  *   $data = api_call('login', ['username' => $u, 'password' => $p]);          // endpoint Login
  *   $data = api_call('dashboard', ['params' => ['banding' => 'kemarin']]);    // endpoint monitoring
  */
-require_once __DIR__ . '/MonCrypto.php';
+require_once __DIR__ . '/../MonCrypto.php';
 
 const API_JSON = JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES;   // HARUS sama dengan yang dipakai Api_core
 
 function api_cfg()
 {
     static $c = null;
-    if ($c === null) $c = require __DIR__ . '/config.api.php';
+    if ($c === null) $c = require __DIR__ . '/../config.api.php';
     return $c;
 }
 

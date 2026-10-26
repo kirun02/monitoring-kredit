@@ -2,7 +2,7 @@
 // Data halaman ini diambil dari API backend (tidak menyentuh database).
 require __DIR__ . '/lib.php';
 if (($_GET['data'] ?? '') === '1') {
-    require_once __DIR__ . '/api_client.php';
+    require_once __DIR__ . '/api/api_client.php';
     api_proxy('pergerakan', ['tgl', 'banding', 'arah']);
 }
 page_head('Pergerakan kolek', 'gerak');
@@ -56,7 +56,7 @@ page_head('Pergerakan kolek', 'gerak');
 
 <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
 <script src="https://cdn.datatables.net/1.13.11/js/jquery.dataTables.min.js"></script>
-<script src="dt-id.js"></script>
+<script src="assets/dt-id.js"></script>
 <script>
     $(function() {
         var F = {
