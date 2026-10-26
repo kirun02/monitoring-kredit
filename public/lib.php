@@ -18,6 +18,7 @@ function page_head(string $title, string $active): void {
     echo '<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
        . '<title>' . h($title) .'</title>'
        . '<link rel="stylesheet" href="style.css">'
+       . '<link rel="stylesheet" href="mobile.css">'
        . '</head><body>'
        . '<header class="top"><a class="brand" href="index.php">Monitoring Kredit</a><nav>'
        . '<a href="index.php" class="' . ($active === 'dash' ? 'on' : '') . '">Dashboard</a>'

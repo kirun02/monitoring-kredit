@@ -24,7 +24,6 @@ page_head('Input kunjungan', 'kunjungan');
 
 <div>
     <h1>Input kunjungan</h1>
-    <div class="sub">Catat hasil kunjungan ke debitur. Dicatat atas nama <b><?= h($nama) ?></b>.</div>
 </div>
 
 <ol class="steps" id="steps" aria-label="Langkah pengisian">
@@ -52,7 +51,7 @@ page_head('Input kunjungan', 'kunjungan');
                 <input class="fi" id="rekening" name="rekening" maxlength="15" placeholder="Pilih rekening..." readonly autocomplete="off" autocapitalize="characters" spellcheck="false">
                 <button type="button" class="btn primary" id="btnCari"><svg class="ic"><use href="#i-search"/></svg>Cari Debitur</button>
             </div>
-            <button type="button" class="manual-toggle" id="btnManual">Debitur tidak ada di daftar? Isi manual</button>
+            <!--button type="button" class="manual-toggle" id="btnManual">Debitur tidak ada di daftar? Isi manual</button-->
 
             <div class="manual" id="manual" hidden>
                 <div>
@@ -103,7 +102,7 @@ page_head('Input kunjungan', 'kunjungan');
             <div><h2>Foto &amp; Lokasi</h2><p>Bukti dokumentasi kunjungan</p></div>
         </div>
         <div class="fsec-b">
-            <label class="lbl-f" for="lokasi">Lokasi GPS</label>
+            <label class="lbl-f" for="lokasi">Lokasi GPS <span class="wajib">*</span></label>
             <div class="lok">
                 <button type="button" class="btn" id="btnGps"><svg class="ic"><use href="#i-pin"/></svg><span>Ambil Lokasi</span></button>
                 <textarea class="fi" id="lokasi" name="lokasi" maxlength="200" rows="2" readonly placeholder="Koordinat akan muncul di sini"></textarea>
@@ -407,6 +406,7 @@ page_head('Input kunjungan', 'kunjungan');
             if (!f.nama.value.trim()) return gagal('Nama debitur wajib diisi.', f.nama);
             if (!f.keterangan.value.trim()) return gagal('Keterangan kunjungan wajib diisi.', f.keterangan);
             if (!fotoBlob) return gagal('Foto kunjungan wajib diisi.', $('fz'));
+            if (!f.lokasi) return gagal('Lokasi wajib diisi.', f.lokasi);
             if (f.tgl_komit.value && f.tgl_komit.value < HARI_INI) return gagal('Tanggal komitmen tidak boleh sebelum hari ini.', f.tgl_komit);
             f.rekening.value = rek;
 
