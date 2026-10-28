@@ -1,0 +1,20 @@
+/* Tambahan untuk akses.php. Tab, kar-bar, card, btn, fi dari karyawan.css, kunjungan.css, style.css. */
+.ak-grid{display:grid;grid-template-columns:290px 1fr;gap:16px;align-items:start}
+.ak-users ul{list-style:none;margin:8px 0 0;padding:0;max-height:62vh;overflow:auto}
+.ak-user{display:block;width:100%;text-align:left;padding:9px 10px;margin-bottom:2px;border:1px solid transparent;border-radius:8px;background:none;font:inherit;color:inherit;cursor:pointer}
+.ak-user:hover{background:#f1f4f4}
+.ak-user.on{background:#dcefe9;border-color:#0f6b63}
+.ak-user small{display:block;color:#5b6b73}
+
+.ak-grup{border:1px solid #ccd6d8;border-radius:10px;padding:10px 12px;margin-bottom:10px}
+.ak-induk{display:flex;align-items:center;gap:8px;padding-bottom:6px;margin-bottom:6px;border-bottom:1px solid #e3e9ea;cursor:pointer}
+.ak-anak{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:4px 16px}
+.ak-item{display:flex;align-items:center;gap:8px;padding:5px 0;cursor:pointer}
+.ak-item .muted{font-size:.8rem}
+.ak-grid input[type=checkbox]{width:18px;height:18px;flex:none}
+.ak-kosong{color:#5b6b73;padding:18px 0}
+
+@media (max-width:760px){
+  .ak-grid{grid-template-columns:1fr}
+  .ak-users ul{max-height:30vh}
+}

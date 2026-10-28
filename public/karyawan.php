@@ -1,15 +1,7 @@
 <?php
-// Data karyawan (admin). Tidak menyentuh database: semuanya lewat api_karyawan.php (proxy ke API).
+// Data karyawan. Akses diatur lewat menu Hak Akses ('web_karyawan'), dicek otomatis oleh page_head. Tidak menyentuh database: semuanya lewat api_karyawan.php (proxy ke API).
 require __DIR__ . '/lib.php';
 
-$u = auth_user() ?? [];
-if (($u['staff'] ?? '') !== 'admin') {   // peran ada di $_SESSION['user']['staff'] (admin / pimpinan / ao)
-    http_response_code(403);
-    page_head('Data karyawan', 'karyawan');
-    echo '<div class="flash err">Halaman ini hanya untuk admin.</div>';
-    page_foot();
-    exit;
-}
 
 page_head('Data karyawan', 'karyawan');
 ?>
@@ -20,12 +12,7 @@ page_head('Data karyawan', 'karyawan');
     <h1>Data karyawan</h1>
 </div>
 
-<?php if (is_file(__DIR__ . '/pengguna.php')): ?>
-<nav class="tabs" aria-label="Bagian data pegawai">
-    <a class="on" href="karyawan.php">Data Karyawan</a>
-    <a href="pengguna.php">Pengguna Aplikasi</a>
-</nav>
-<?php endif; ?>
+<?php tabs_html('web_karyawan'); ?>
 
 <div id="msg" aria-live="polite"></div>
 

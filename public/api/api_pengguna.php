@@ -6,7 +6,7 @@
  *   POST jenis=input  (multipart)  -> tambah pengguna
  *   POST jenis=update (multipart)  -> ubah pengguna (password kosong = tidak diganti)
  *
- * Hanya admin. Hash password tidak pernah sampai ke browser, dan password tidak pernah ditulis ke log.
+ * Hanya pengguna dengan hak akses menu Pengguna Aplikasi. Hash password tidak pernah sampai ke browser, dan password tidak pernah ditulis ke log.
  */
 require __DIR__ . '/../lib.php';           // wajib login + CSRF untuk POST
 require_once __DIR__ . '/api_client.php';
@@ -20,9 +20,8 @@ function keluar($data, $kode = 200)
     exit;
 }
 
-$u = auth_user() ?? [];
-if (($u['staff'] ?? '') !== 'admin') keluar(['error' => 'Hanya admin yang boleh mengelola pengguna.'], 403);
-$idSaya = (int)($u['id'] ?? 0);
+akses_atau_403('web_pengguna');   // hak akses menu Pengguna Aplikasi
+$idSaya = (int)((auth_user() ?? [])['id'] ?? 0);
 
 $cfg  = api_cfg();
 $path = (string)($cfg['path_pengguna'] ?? '');
@@ -72,9 +71,9 @@ try {
         if (!preg_match('/^[0-9A-Za-z]{0,15}$/', $kodeAo))      keluar(['error' => 'Kode AO hanya huruf dan angka, maksimal 15 karakter.'], 422);
         if ($jenis === 'update' && $idTarget <= 0)              keluar(['error' => 'Pengguna tidak valid.'], 422);
 
-        // admin tidak boleh mengunci dirinya sendiri
-        if ($jenis === 'update' && $idTarget === $idSaya && (!$aktif || $role !== 'admin')) {
-            keluar(['error' => 'Akun yang sedang kamu pakai tidak boleh dinonaktifkan atau diturunkan perannya.'], 422);
+        // jangan menonaktifkan akun yang sedang dipakai
+        if ($jenis === 'update' && $idTarget === $idSaya && !$aktif) {
+            keluar(['error' => 'Akun yang sedang kamu pakai tidak boleh dinonaktifkan.'], 422);
         }
 
         $isi = [

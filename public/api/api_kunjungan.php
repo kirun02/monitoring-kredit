@@ -3,7 +3,7 @@
  * Proxy kunjungan untuk halaman kunjungan.php. TIDAK menyentuh database: semuanya lewat API backend (terenkripsi).
  *
  *   GET  ?jenis=preview            -> kunjungan hari ini milik pemakai yang login         {rows:[...]}
- *   GET  ?jenis=debitur            -> daftar debitur milik AO yang login (untuk dialog)   {rows:[...], info, posisi}
+ *   GET  ?jenis=cari&nama=&page=   -> cari debitur menurut nama / rekening (server-side)       {rows:[...], total, total_page, page}
  *   POST jenis=insert (multipart)  -> simpan kunjungan + foto                             {message} / {error}
  *
  * id_user SELALU diambil dari sesi login, tidak pernah dari browser (kalau tidak, siapa pun bisa mencatat atas nama AO lain).
@@ -29,7 +29,6 @@ function tgl_valid($v)
 
 $u      = auth_user() ?? [];
 $idUser = (int)($u['id'] ?? ($u['id_user'] ?? 0));
-$kodeAo = (string)($u['kode_ao'] ?? '');
 if ($idUser < 1) keluar(['error' => 'Akun tidak valid. Silakan masuk ulang.'], 403);
 
 $post  = $_SERVER['REQUEST_METHOD'] === 'POST';
@@ -58,24 +57,39 @@ try {
         keluar(['rows' => $rows]);
     }
 
-    // ---------- daftar debitur milik AO (dialog Cari Debitur) ----------
-    if (!$post && $jenis === 'debitur') {
-        if ($kodeAo === '') {
-            keluar(['rows' => [], 'info' => 'Akun ini belum terhubung ke kode AO, jadi daftar debitur tidak tersedia. Gunakan isi manual.']);
-        }
-        $r = api_call('debitur', ['params' => ['ao' => $kodeAo]], $cfg['path_monitoring']);
-        if (($r['status'] ?? '') !== 'success') keluar(['rows' => [], 'info' => 'Daftar debitur belum bisa dimuat. Gunakan isi manual.']);
-        $d = $r['data'] ?? [];
+    // ---------- cari debitur (dialog Cari Debitur) ----------
+    // Pencarian di server, per halaman, menurut nama atau nomor rekening (tanpa batasan AO).
+    //   ?jenis=cari&nama=KATA&page=N   -> {rows:[...], total, total_page, page}
+    // Kata kunci berupa huruf+angka tanpa spasi yang memuat angka dianggap nomor rekening (cocok persis).
+    if (!$post && $jenis === 'cari') {
+        $q    = trim((string)($_GET['nama'] ?? ''));
+        $hal  = max(1, min(10000, (int)($_GET['page'] ?? 1)));
+        $per  = 10;
+        if (mb_strlen($q) < 2) keluar(['error' => 'Ketik minimal 2 karakter.'], 422);
+
+        $norek = (bool)preg_match('/^[0-9A-Za-z]{1,15}$/', $q) && (bool)preg_match('/\d/', $q);
+        $r = $norek
+            ? api_call('norek', ['rekening' => $q], $cfg['path_nasabah'])
+            : api_call('kredit', ['nama' => $q, 'page' => $hal, 'total_record' => $per], $cfg['path_nasabah']);
+
+        $st = (string)($r['status'] ?? '');
+        if ($st === 'gagal') keluar(['rows' => [], 'total' => 0, 'total_page' => 1, 'page' => 1]);   // tidak ada yang cocok
+        if ($st !== 'success') keluar(['error' => (string)($r['message'] ?? 'Pencarian debitur gagal.')], 502);
+
         $rows = [];
-        foreach (($d['rows'] ?? []) as $x) {
+        foreach (($r['debitur'] ?? []) as $x) {
             $rows[] = [
-                'norek' => (string)$x['norek'], 'cif' => (string)($x['cif'] ?? ''), 'nama' => (string)($x['nama'] ?? ''),
-                'alamat' => (string)($x['alamat'] ?? ''), 'baki' => (string)($x['bakidebet'] ?? ''), 'plafon' => (string)($x['plafon'] ?? ''),
-                'kolek' => (int)($x['kolek'] ?? 0), 'hari' => (int)($x['hari'] ?? 0), 'tempo' => (string)($x['tempo'] ?? ''),
+                'norek'  => (string)($x['rekening'] ?? ''), 'cif' => (string)($x['cif'] ?? ''), 'nama' => (string)($x['nama'] ?? ''),
+                'alamat' => (string)($x['alamat'] ?? ''),   'baki' => (string)($x['baki'] ?? ''), 'plafon' => '',
+                'kolek'  => (int)($x['kolek'] ?? 0),        'hari' => (int)($x['hari'] ?? 0),     'tempo' => (string)($x['tempo'] ?? ''),
             ];
         }
-        $posisi = isset($d['sel']['tgl']) ? date('d/m/Y', strtotime($d['sel']['tgl'])) : '';
-        keluar(['rows' => $rows, 'posisi' => $posisi]);
+        keluar([
+            'rows'       => $rows,
+            'total'      => $norek ? count($rows) : (int)($r['total'] ?? count($rows)),
+            'total_page' => $norek ? 1 : max(1, (int)($r['total_page'] ?? 1)),
+            'page'       => $norek ? 1 : $hal,
+        ]);
     }
 
     // ---------- simpan kunjungan ----------

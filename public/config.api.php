@@ -21,5 +21,6 @@ return [
     'enc_key'           => $_ENV['MON_ENC_KEY'],  
     'timeout'           => 30,
     'path_upload'       => '/api_monitoring/Upload_nominatif',
-    'timeout_upload'    => 300,   // detik; tahap "selesai" membaca Excel dan bisa lama    
+    'timeout_upload'    => 300,   // detik; tahap "selesai" membaca Excel dan bisa lama 
+    'foto_dir'          => $_ENV['MON_ENC_FOTOK'],
 ];

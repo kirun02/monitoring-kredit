@@ -7,7 +7,7 @@
  *   POST jenis=update (multipart)  -> ubah karyawan (foto lama dipertahankan bila tidak diganti)
  *   POST jenis=hapus               -> hapus karyawan (+ foto)
  *
- * Hanya admin. Path foto yang dikirim ke API SELALU berasal dari foto_simpan() atau dari data API, tidak pernah dari browser.
+ * Hanya pengguna dengan hak akses menu Data Karyawan. Path foto yang dikirim ke API SELALU berasal dari foto_simpan() atau dari data API, tidak pernah dari browser.
  */
 require __DIR__ . '/../lib.php';              // wajib login + CSRF untuk POST
 require_once __DIR__ . '/api_client.php';
@@ -34,8 +34,7 @@ function muat_data($path)
     return [$k['rows'] ?? [], $a['rows'] ?? []];
 }
 
-$u = auth_user() ?? [];
-if (($u['staff'] ?? '') !== 'admin') keluar(['error' => 'Hanya admin yang boleh mengelola karyawan.'], 403);   // peran ada di $_SESSION['user']['staff'] (admin / pimpinan / ao)
+akses_atau_403('web_karyawan');   // hak akses menu Data Karyawan
 
 $cfg  = api_cfg();
 $path = (string)($cfg['path_karyawan'] ?? '');

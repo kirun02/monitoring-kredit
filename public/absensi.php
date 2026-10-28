@@ -9,8 +9,8 @@ $jenisAwal = (int)date('G') < 12 ? 'masuk' : 'pulang';   // pagi: masuk, siang k
 
 page_head('Absensi', 'absensi');
 ?>
-<link rel="stylesheet" href="kunjungan.css">
-<link rel="stylesheet" href="absensi.css">
+<link rel="stylesheet" href="assets/kunjungan.css">
+<link rel="stylesheet" href="assets/absensi.css">
 
 <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
     <symbol id="i-cal" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></symbol>
@@ -221,7 +221,7 @@ page_head('Absensi', 'absensi');
             btn.classList.add('loading');
             btn.querySelector('.t').textContent = 'Mengirim…';
 
-            ambil('api_absensi.php', { method: 'POST', body: fd }).then(function(r) {
+            ambil('api/api_absensi.php', { method: 'POST', body: fd }).then(function(r) {
                 if (r.ok) {
                     msg(true, r.d.message || 'Absen berhasil disimpan.');
                     form.reset();

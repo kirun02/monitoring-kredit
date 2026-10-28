@@ -56,7 +56,7 @@ page_head('Prioritas tagih', 'prioritas');
 
 <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
 <script src="https://cdn.datatables.net/1.13.11/js/jquery.dataTables.min.js"></script>
-<script src="dt-id.js"></script>
+<script src="assets/dt-id.js"></script>
 <script>
     $(function() {
         var F = {

@@ -1,5 +1,5 @@
 <?php
-// Form input kunjungan AO. Tidak menyentuh database: pencarian debitur, simpan, dan daftar hari ini lewat api_kunjungan.php (proxy ke API).
+// Form input kunjungan AO. Tidak menyentuh database: pencarian debitur, simpan, dan daftar hari ini lewat api/api_kunjungan.php (proxy ke API).
 require __DIR__ . '/lib.php';
 
 $u    = auth_user() ?? [];
@@ -8,7 +8,7 @@ $saya = (string)($u['id'] ?? ($u['id_user'] ?? ''));   // sesi menyimpan 'id' (v
 
 page_head('Input kunjungan', 'kunjungan');
 ?>
-<link rel="stylesheet" href="kunjungan.css">
+<link rel="stylesheet" href="assets/kunjungan.css">
 
 <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
     <symbol id="i-db" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></symbol>
@@ -51,7 +51,7 @@ page_head('Input kunjungan', 'kunjungan');
                 <input class="fi" id="rekening" name="rekening" maxlength="15" placeholder="Pilih rekening..." readonly autocomplete="off" autocapitalize="characters" spellcheck="false">
                 <button type="button" class="btn primary" id="btnCari"><svg class="ic"><use href="#i-search"/></svg>Cari Debitur</button>
             </div>
-            <!--button type="button" class="manual-toggle" id="btnManual">Debitur tidak ada di daftar? Isi manual</button-->
+            <button type="button" class="manual-toggle" id="btnManual">Debitur tidak ada di daftar? Isi manual</button>
 
             <div class="manual" id="manual" hidden>
                 <div>
@@ -149,9 +149,17 @@ page_head('Input kunjungan', 'kunjungan');
         <h2 id="dlgJudul">Cari Debitur</h2>
         <button type="button" class="btn" id="dlgTutup" aria-label="Tutup"><svg class="ic"><use href="#i-x"/></svg></button>
     </div>
-    <div class="dlg-s"><input class="fi" id="dlgCari" type="search" placeholder="Ketik nama, nomor rekening, atau alamat" autocomplete="off"></div>
+    <form class="dlg-s" id="dlgForm" role="search" style="display:flex;gap:8px">
+        <input class="fi" id="dlgCari" type="search" enterkeyhint="search" placeholder="Ketik nama debitur atau nomor rekening" autocomplete="off" style="flex:1;min-width:0">
+        <button type="submit" class="btn primary" id="dlgGo"><svg class="ic"><use href="#i-search"/></svg>Cari</button>
+    </form>
     <div class="dlg-info" id="dlgInfo"></div>
     <ul class="dlg-list" id="dlgList"></ul>
+    <div id="dlgPg" style="display:none;align-items:center;justify-content:space-between;gap:8px;padding:10px 16px">
+        <button type="button" class="btn" id="pgPrev">Sebelumnya</button>
+        <span class="muted" id="pgInfo"></span>
+        <button type="button" class="btn" id="pgNext">Berikutnya</button>
+    </div>
 </dialog>
 
 <script>
@@ -164,8 +172,7 @@ page_head('Input kunjungan', 'kunjungan');
             btn = document.getElementById('simpan'),
             sending = false,
             fotoBlob = null,
-            manual = false,
-            semuaDeb = null; // daftar debitur (dimuat sekali, saat dialog pertama kali dibuka)
+            manual = false;
 
         function $(id) { return document.getElementById(id); }
 
@@ -221,45 +228,70 @@ page_head('Input kunjungan', 'kunjungan');
 
         function tutupDlg() { if (dlg.open) dlg.close(); }
 
-        function gambarDaftar() {
-            var q = dlgCari.value.trim().toLowerCase(), hasil;
-            if (semuaDeb === null) return;
-            hasil = !q ? semuaDeb : semuaDeb.filter(function(d) {
-                return (d.nama + ' ' + d.norek + ' ' + d.cif + ' ' + d.alamat).toLowerCase().indexOf(q) !== -1;
-            });
-            tampil = hasil.slice(0, 50);
-            dlgList.innerHTML = tampil.map(function(d, i) {
-                return '<li><button type="button" class="dlg-item" data-i="' + i + '"><span><span class="t">' + esc(d.nama || '(tanpa nama)') + '</span><br>' +
-                    '<span class="m">' + esc(d.norek) + (d.alamat ? ' · ' + esc(d.alamat) : '') + '</span></span>' +
-                    '<span class="r">Kolek ' + esc(d.kolek) + '<br>' + esc(d.hari) + ' hari</span></button></li>';
-            }).join('') || '<li class="dlg-info" style="padding:16px">Tidak ada debitur yang cocok.</li>';
-            dlgInfo.textContent = hasil.length + ' debitur' + (hasil.length > 50 ? ' (menampilkan 50 pertama, persempit pencarian)' : '') +
-                (semuaDeb.posisi ? ' · posisi data ' + semuaDeb.posisi : '');
+        var dlgPg = $('dlgPg'), kataCari = '', halCari = 1, totalHal = 1, seq = 0;
+
+        function petunjuk() {
+            tampil = [];
+            dlgList.innerHTML = '';
+            dlgPg.style.display = 'none';
+            dlgInfo.textContent = 'Ketik nama debitur (minimal 2 huruf) atau nomor rekening, lalu tekan Cari.';
         }
 
-        function muatDebitur() {
-            if (semuaDeb !== null) { gambarDaftar(); return; }
-            dlgInfo.textContent = 'Memuat daftar debitur…';
-            ambil('api_kunjungan.php?jenis=debitur').then(function(r) {
-                if (!r.ok) { dlgInfo.textContent = (r.d && r.d.error) || 'Daftar debitur belum bisa dimuat. Gunakan isi manual.'; return; }
-                semuaDeb = r.d.rows || [];
-                semuaDeb.posisi = r.d.posisi || '';
-                if (!semuaDeb.length) { dlgInfo.textContent = r.d.info || 'Belum ada data debitur. Gunakan isi manual.'; semuaDeb = null; return; }
-                gambarDaftar();
-            }).catch(function() { dlgInfo.textContent = 'Daftar debitur belum bisa dimuat. Gunakan isi manual.'; });
+        function gambarHasil(d) {
+            tampil = d.rows || [];
+            if (d.info && !tampil.length) {   // pencarian tidak tersedia untuk akun ini (mis. belum ada kode AO)
+                dlgList.innerHTML = '';
+                dlgPg.style.display = 'none';
+                dlgInfo.textContent = d.info;
+                return;
+            }
+            dlgList.innerHTML = tampil.map(function(x, i) {
+                return '<li><button type="button" class="dlg-item" data-i="' + i + '"><span><span class="t">' + esc(x.nama || '(tanpa nama)') + '</span><br>' +
+                    '<span class="m">' + esc(x.norek) + (x.alamat ? ' · ' + esc(x.alamat) : '') + '</span></span>' +
+                    '<span class="r">Kolek ' + esc(x.kolek) + '<br>' + esc(x.hari) + ' hari</span></button></li>';
+            }).join('') || '<li class="dlg-info" style="padding:16px">Tidak ada debitur yang cocok.</li>';
+            totalHal = d.total_page || 1;
+            halCari  = d.page || 1;
+            dlgInfo.textContent = (d.total || 0) + ' debitur ditemukan';
+            $('pgInfo').textContent = 'Halaman ' + halCari + ' dari ' + totalHal;
+            $('pgPrev').disabled = halCari <= 1;
+            $('pgNext').disabled = halCari >= totalHal;
+            dlgPg.style.display = totalHal > 1 ? 'flex' : 'none';
+        }
+
+        // pencarian dijalankan di server, hanya saat tombol Cari ditekan atau Enter (bukan setiap ketikan)
+        function cariDebitur(hal) {
+            var q = dlgCari.value.trim(), ini = ++seq;
+            if (hal === 1) kataCari = q;       // pindah halaman memakai kata kunci yang sama dengan pencarian terakhir
+            q = kataCari;
+            if (q.length < 2) { petunjuk(); dlgInfo.textContent = 'Ketik minimal 2 huruf atau angka, lalu tekan Cari.'; return; }
+            dlgInfo.textContent = 'Mencari…';
+            $('dlgGo').disabled = true;
+            ambil('api/api_kunjungan.php?jenis=cari&nama=' + encodeURIComponent(q) + '&page=' + hal).then(function(r) {
+                if (ini !== seq) return;       // sudah ada pencarian yang lebih baru
+                if (!r.ok) {
+                    tampil = []; dlgList.innerHTML = ''; dlgPg.style.display = 'none';
+                    dlgInfo.textContent = (r.d && r.d.error) || 'Pencarian belum bisa dilakukan. Gunakan isi manual.';
+                    return;
+                }
+                gambarHasil(r.d);
+            }).catch(function() {
+                if (ini === seq) dlgInfo.textContent = 'Pencarian belum bisa dilakukan. Periksa koneksi, atau gunakan isi manual.';
+            }).then(function() { $('dlgGo').disabled = false; });
         }
 
         $('btnCari').addEventListener('click', function() {
             dlgCari.value = '';
-            dlgList.innerHTML = '';
+            kataCari = '';
+            petunjuk();
             if (typeof dlg.showModal === 'function') dlg.showModal(); else dlg.setAttribute('open', '');
-            muatDebitur();
             dlgCari.focus();
         });
         $('dlgTutup').addEventListener('click', tutupDlg);
         dlg.addEventListener('click', function(e) { if (e.target === dlg) tutupDlg(); }); // klik latar
-        var tunda;
-        dlgCari.addEventListener('input', function() { clearTimeout(tunda); tunda = setTimeout(gambarDaftar, 120); });
+        $('dlgForm').addEventListener('submit', function(e) { e.preventDefault(); cariDebitur(1); });
+        $('pgPrev').addEventListener('click', function() { if (halCari > 1) cariDebitur(halCari - 1); });
+        $('pgNext').addEventListener('click', function() { if (halCari < totalHal) cariDebitur(halCari + 1); });
 
         function isiDebitur(d) {
             f.rekening.value = d.norek;
@@ -378,7 +410,7 @@ page_head('Input kunjungan', 'kunjungan');
         var tbody = document.querySelector('#hariIni tbody'), jumlah = $('jumlah');
 
         function muatDaftar() {
-            ambil('api_kunjungan.php?jenis=preview&tgl1=' + HARI_INI + '&tgl2=' + HARI_INI).then(function(r) {
+            ambil('api/api_kunjungan.php?jenis=preview&tgl1=' + HARI_INI + '&tgl2=' + HARI_INI).then(function(r) {
                 if (!r.ok) throw new Error(r.status);
                 var rows = (r.d.rows || []).slice().reverse(); // terbaru di atas
                 jumlah.textContent = rows.length + ' kunjungan';
@@ -418,7 +450,7 @@ page_head('Input kunjungan', 'kunjungan');
             btn.classList.add('loading');
             btn.querySelector('.t').textContent = 'Menyimpan…';
 
-            ambil('api_kunjungan.php', { method: 'POST', body: fd }).then(function(r) {
+            ambil('api/api_kunjungan.php', { method: 'POST', body: fd }).then(function(r) {
                 if (r.ok) {
                     msg(true, r.d.message || 'Data berhasil disimpan.');
                     form.reset();

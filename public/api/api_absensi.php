@@ -11,6 +11,7 @@ require __DIR__ . '/../lib.php';              // wajib login + CSRF untuk POST
 require_once __DIR__ . '/api_client.php';
 require_once __DIR__ . '/../foto_lib.php';
 date_default_timezone_set('Asia/Jakarta');
+akses_atau_403('web_absensi');   // hak akses menu Absensi
 
 function keluar($data, $kode = 200)
 {

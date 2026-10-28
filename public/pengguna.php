@@ -1,30 +1,18 @@
 <?php
-// Pengguna aplikasi (admin). Tidak menyentuh database: semuanya lewat api/api_pengguna.php (proxy ke API).
+// Pengguna aplikasi. Akses diatur lewat menu Hak Akses ('web_pengguna'), dicek otomatis oleh page_head. Tidak menyentuh database: semuanya lewat api/api_pengguna.php (proxy ke API).
 require __DIR__ . '/lib.php';
 
-$u = auth_user() ?? [];
-if (($u['staff'] ?? '') !== 'admin') {   // peran ada di $_SESSION['user']['staff'] (admin / pimpinan / ao)
-    http_response_code(403);
-    page_head('Pengguna aplikasi', 'karyawan');
-    echo '<div class="flash err">Halaman ini hanya untuk admin.</div>';
-    page_foot();
-    exit;
-}
-
-page_head('Pengguna aplikasi', 'karyawan');
+page_head('Pengguna aplikasi', 'pengguna');
 ?>
-<link rel="stylesheet" href="kunjungan.css">
-<link rel="stylesheet" href="karyawan.css">
-<link rel="stylesheet" href="pengguna.css">
+<link rel="stylesheet" href="assets/kunjungan.css">
+<link rel="stylesheet" href="assets/karyawan.css">
+<link rel="stylesheet" href="assets/pengguna.css">
 
 <div>
     <h1>Pengguna aplikasi</h1>
 </div>
 
-<nav class="tabs" aria-label="Bagian data pegawai">
-    <a href="karyawan.php">Data Karyawan</a>
-    <a class="on" href="pengguna.php" aria-current="page">Pengguna Aplikasi</a>
-</nav>
+<?php tabs_html('web_pengguna'); ?>
 
 <div id="msg" aria-live="polite"></div>
 
