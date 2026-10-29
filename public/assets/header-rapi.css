@@ -1,0 +1,35 @@
+/* =====================================================================
+   Rapikan header di layar lebar. Tempel di PALING BAWAH assets/mobile.css.
+   Isinya menyamakan desktop dengan susunan yang sudah ada untuk HP:
+     baris 1 :  Monitoring Kredit ................ Administrator [Keluar]
+     baris 2 :  Dashboard  Pergerakan  Prioritas tagih  ...   (menu aktif: garis hijau, kelas .on)
+   Tidak mengubah aturan HP di mobile.css.
+   ===================================================================== */
+
+.top { gap: 0 12px; padding: 0 24px; }
+.top .brand { padding: 12px 0; }
+
+/* menu: satu baris penuh di bawah, bisa digeser bila terlalu panjang */
+.top nav {
+  order: 3; flex: 1 0 100%;
+  overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none;
+  border-top: 1px solid rgba(255, 255, 255, .14);
+}
+.top nav::-webkit-scrollbar { display: none; }
+.top nav a {
+  flex: none; display: flex; align-items: center;
+  padding: 0 14px; white-space: nowrap;
+}
+.top nav a:hover { color: #fff; background: rgba(255, 255, 255, .07); }
+
+/* nama user + tombol keluar: baris 1, rata kanan */
+.top nav ~ * { order: 2; color: rgba(255, 255, 255, .8); }
+.top nav + * { margin-left: auto; }
+.top .muted { color: rgba(255, 255, 255, .8); }   /* "Administrator" tadinya abu gelap di atas latar gelap */
+
+.top .btn, .top button {
+  height: 34px; padding: 0 14px; font-size: 13px;
+  color: #fff; background: transparent;
+  border: 1px solid rgba(255, 255, 255, .45);
+}
+.top .btn:hover, .top button:hover { background: rgba(255, 255, 255, .12); }

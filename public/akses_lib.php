@@ -18,6 +18,7 @@ const AKTIF_KE_KODE = [
     'lapkun'    => 'web_lap_kunjungan',
     'absensi'   => 'web_absensi',
     'upload'    => 'web_upload',
+    'belum_bayar' => 'web_belum_bayar',
     'karyawan'  => 'web_karyawan',
     'pengguna'  => 'web_pengguna',
     'akses'     => 'web_akses',

@@ -28,7 +28,8 @@ $jenis  = (string)($post ? ($_POST['jenis'] ?? '') : ($_GET['jenis'] ?? ''));
 try {
     // ---------- daftar pengguna ----------
     if (!$post && $jenis === 'pengguna') {
-        $r = api_call('daftar_user', []);
+        //$r = api_call('daftar', [], api_cfg()['path_pengguna']);
+        $r = api_call('daftar', [], api_cfg()['path_pengguna']);
         if (($r['status'] ?? '') !== 'success') keluar(['error' => 'Daftar pengguna tidak dapat dimuat.'], 502);
         $rows = [];
         foreach (($r['rows'] ?? []) as $x) {

@@ -2,6 +2,7 @@
 // Hak akses menu per pengguna. Tidak menyentuh database: semuanya lewat api/api_akses.php (proxy ke API).
 // Siapa yang boleh membuka halaman ini ditentukan oleh hak akses menu 'web_akses' (dicek otomatis oleh page_head).
 require __DIR__ . '/lib.php';
+//require __DIR__ . '/akses_lib.php';
 
 page_head('Hak akses', 'akses');
 ?>
@@ -17,19 +18,20 @@ page_head('Hak akses', 'akses');
 
 <div id="msg" aria-live="polite"></div>
 
-<div class="ak-grid">
-    <div class="card ak-users">
-        <b>Pengguna</b> <span class="muted" id="jmlUser"></span>
-        <input class="fi" id="cariUser" type="search" placeholder="Cari username atau nama" autocomplete="off" style="margin-top:8px">
-        <ul id="listUser"><li class="muted">Memuat…</li></ul>
-    </div>
+<div class="card" style="margin-bottom:12px">
+    <label for="pilihUser"><b>Pengguna</b> <span class="muted" id="jmlUser"></span></label>
+    <select class="fi" id="pilihUser" style="margin-top:8px;width:100%;max-width:420px" disabled>
+        <option value="">Memuat…</option>
+    </select>
+</div>
 
+<div>
     <form id="fAkses" class="card" method="post" novalidate>
         <input type="hidden" name="_csrf" value="<?= h(csrf_token()) ?>">
         <input type="hidden" name="jenis" value="simpan">
         <input type="hidden" name="user_id" value="0">
 
-        <b id="judul">Pilih pengguna di sebelah kiri</b>
+        <b id="judul">Pilih pengguna pada dropdown di atas</b>
         <div class="hint" style="margin:4px 0 12px">Perubahan berlaku saat pengguna tersebut masuk ulang.</div>
 
         <div id="daftarMenu"><div class="ak-kosong">Belum ada pengguna yang dipilih.</div></div>
@@ -80,25 +82,32 @@ page_head('Hak akses', 'akses');
             $('btnKosong').disabled = !aktif;
         }
 
-        // ---------- daftar pengguna ----------
+        // ---------- daftar pengguna (dropdown) ----------
         function gambarUser() {
-            var q = $('cariUser').value.trim().toLowerCase();
-            var rows = st.users.filter(function(x) { return !q || (x.username + ' ' + x.nama).toLowerCase().indexOf(q) !== -1; });
-            $('jmlUser').textContent = rows.length + ' pengguna';
-            $('listUser').innerHTML = rows.length ? rows.map(function(x) {
-                return '<li><button type="button" class="ak-user' + (st.user && st.user.id === x.id ? ' on' : '') + '" data-id="' + x.id + '">' +
-                    '<b>' + esc(x.username) + '</b><small>' + esc(x.nama) + (x.role ? ' · ' + esc(x.role) : '') + '</small></button></li>';
-            }).join('') : '<li class="muted">Tidak ada yang cocok.</li>';
+            var sel = $('pilihUser');
+            $('jmlUser').textContent = st.users.length + ' pengguna';
+            sel.innerHTML = '<option value="">— pilih pengguna —</option>' + st.users.map(function(x) {
+                return '<option value="' + x.id + '">' + esc(x.username) + (x.nama ? ' · ' + esc(x.nama) : '') + (x.role ? ' (' + esc(x.role) + ')' : '') + '</option>';
+            }).join('');
+            sel.value = st.user ? String(st.user.id) : '';
+            sel.disabled = st.users.length === 0;
         }
-        $('cariUser').addEventListener('input', gambarUser);
 
-        $('listUser').addEventListener('click', function(e) {
-            var b = e.target.closest('button[data-id]');
-            if (!b) return;
-            var id = +b.getAttribute('data-id');
+        $('pilihUser').addEventListener('change', function() {
+            var id = +this.value;
+            if (!id) { kosongkan(); return; }
             var u = st.users.filter(function(x) { return x.id === id; })[0];
             if (u) pilihUser(u);
         });
+
+        function kosongkan() {
+            st.user = null; st.menus = []; st.granted = {};
+            f.user_id.value = '0';
+            $('judul').textContent = 'Pilih pengguna pada dropdown di atas';
+            $('daftarMenu').innerHTML = '<div class="ak-kosong">Belum ada pengguna yang dipilih.</div>';
+            tombol(false);
+            msgBox.innerHTML = '';
+        }
 
         function muatUser() {
             ambil('api/api_akses.php?jenis=pengguna').then(function(r) {
@@ -106,7 +115,7 @@ page_head('Hak akses', 'akses');
                 st.users = r.d.rows || [];
                 gambarUser();
             }).catch(function(e) {
-                $('listUser').innerHTML = '<li class="muted">Daftar pengguna belum bisa dimuat.</li>';
+                $('pilihUser').innerHTML = '<option value="">Daftar pengguna belum bisa dimuat</option>';
                 msg(false, (e && e.message && e.message !== 'gagal') ? e.message : 'Daftar pengguna belum bisa dimuat.');
             });
         }
@@ -119,7 +128,6 @@ page_head('Hak akses', 'akses');
             $('daftarMenu').innerHTML = '<div class="ak-kosong">Memuat menu…</div>';
             tombol(false);
             msgBox.innerHTML = '';
-            gambarUser();
 
             ambil('api/api_akses.php?jenis=menu&user_id=' + u.id).then(function(r) {
                 if (!r.ok) throw new Error((r.d && r.d.error) || 'gagal');

@@ -32,6 +32,10 @@ page_head('Prioritas tagih', 'prioritas');
 <div class="card" id="perAo"></div>
 
 <div class="card">
+    <div class="no-print" style="display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;margin-bottom:8px">
+        <a class="btn" id="unduhXlsx" href="#">Unduh Excel</a>
+        <a class="btn" id="unduhPdf" href="#" target="_blank" rel="noopener">Cetak PDF</a>
+    </div>
     <b>Daftar kerja</b> <span class="muted" id="ringkasDaftar"></span>
     <div class="scroll" style="margin-top:8px">
         <table id="tblPrioritas" style="width:100%">
@@ -164,8 +168,19 @@ page_head('Prioritas tagih', 'prioritas');
             ]
         });
 
+        // tombol unduh mengikuti filter yang SEDANG tampil (d.sel dari server), bukan isi dropdown yang mungkin belum dimuat
+        function aturUnduh(sel) {
+            var p = new URLSearchParams({ laporan: 'prioritas' });
+            if (sel.tgl) p.set('tgl', sel.tgl);
+            if (sel.ao)  p.set('ao', sel.ao);
+            if (sel.min) p.set('min', sel.min);
+            document.getElementById('unduhXlsx').href = 'api/export.php?' + p.toString() + '&format=xlsx';
+            document.getElementById('unduhPdf').href  = 'api/export.php?' + p.toString() + '&format=pdf';
+        }
+
         function render(d) {
             msgBox.innerHTML = '';
+            aturUnduh(d.sel);
             F.tgl.innerHTML = d.dates.map(function(t) {
                 return opt(t.v, t.l, d.sel.tgl);
             }).join('');

@@ -67,7 +67,7 @@ page_head('Laporan kunjungan', 'lapkun');
 
 <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
 <script src="https://cdn.datatables.net/1.13.11/js/jquery.dataTables.min.js"></script>
-<script src="dt-id.js"></script>
+<script src="assets/dt-id.js"></script>
 <script>
     $(function() {
         var IS_AO = <?= json_encode($staff === 'ao') ?>,
@@ -239,7 +239,7 @@ page_head('Laporan kunjungan', 'lapkun');
             msg(true, '');
             btnTampil.disabled = true;
             btnTampil.textContent = 'Memuat…';
-            fetch('api_kunjungan.php?' + p.toString(), {
+            fetch('api/api_kunjungan.php?' + p.toString(), {
                     credentials: 'same-origin',
                     headers: {
                         'Accept': 'application/json'
@@ -284,7 +284,7 @@ page_head('Laporan kunjungan', 'lapkun');
         function muatAo(pilih) {
             var sel = document.getElementById('fAo');
             if (!sel) return Promise.resolve();
-            return fetch('api_kunjungan.php?jenis=daftar_user', {
+            return fetch('api/api_kunjungan.php?jenis=daftar_user', {
                     credentials: 'same-origin'
                 })
                 .then(function(r) {

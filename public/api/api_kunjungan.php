@@ -92,6 +92,36 @@ try {
         ]);
     }
 
+
+    // ---------- daftar AO (hanya admin/pimpinan) ----------
+    if (!$post && $jenis === 'daftar_user') {
+        if (($u['staff'] ?? '') === 'ao') keluar(['data' => []]);
+        $r = api_call('daftar_user', [], $cfg['path_kunjungan']);
+        if (($r['status'] ?? '') !== 'success') keluar(['error' => (string)($r['message'] ?? 'Daftar AO tidak dapat dimuat.')], 502);
+        keluar(['data' => $r['data'] ?? []]);
+    }
+
+    // ---------- laporan kunjungan ----------
+    if (!$post && $jenis === 'laporan') {
+        $tgl1 = (string)($_GET['tgl1'] ?? date('Y-m-01'));
+        $tgl2 = (string)($_GET['tgl2'] ?? date('Y-m-d'));
+        if (!tgl_valid($tgl1) || !tgl_valid($tgl2) || $tgl1 > $tgl2) keluar(['error' => 'Rentang tanggal tidak valid.'], 422);
+        if ((strtotime($tgl2) - strtotime($tgl1)) / 86400 > 366) keluar(['error' => 'Rentang maksimal 366 hari.'], 422);
+
+        if (($u['staff'] ?? '') === 'ao') {
+            $idFilter = (string)$idUser;                 // AO: dipaksa dari sesi
+        } else {
+            $idFilter = (string)($_GET['id_user'] ?? '');
+            if ($idFilter !== '' && (!ctype_digit($idFilter) || (int)$idFilter < 1 || (int)$idFilter > 32767)) {
+                keluar(['error' => 'Pilihan AO tidak valid.'], 422);
+            }
+        }
+
+        $r = api_call('laporan', ['tgl1' => $tgl1, 'tgl2' => $tgl2, 'id_user' => $idFilter], $cfg['path_kunjungan']);
+        if (($r['status'] ?? '') !== 'success') keluar(['error' => (string)($r['message'] ?? 'Laporan tidak dapat dimuat.')], 502);
+        keluar(['rows' => $r['rows'] ?? []]);            // 'gambar' diteruskan apa adanya, halaman yang memfilter polanya
+    }
+
     // ---------- simpan kunjungan ----------
     if ($post && $jenis === 'insert') {
         $rek  = trim((string)($_POST['rekening'] ?? ''));

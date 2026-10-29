@@ -85,8 +85,8 @@ function auth_login(array $u): void
         'nama'     => (string)($u['nama'] ?? ''),
         'staff'    => (string)($u['staff'] ?? ''),
         'kode_ao'  => (string)($u['kode_ao'] ?? ''),   // dipakai Input kunjungan untuk daftar debitur milik AO
+        'menu'     => auth_menu_bersih($u['menu'] ?? []),   // hak akses menu dari API Login (dibaca akses_lib.php)
     ];
-    $_SESSION['menu'] = auth_menu_bersih($u['menu'] ?? []);   // hak akses menu dari API Login
     $_SESSION['login_at'] = $_SESSION['last'] = time();
     $_SESSION['ua']   = hash('sha256', (string)($_SERVER['HTTP_USER_AGENT'] ?? ''));
     $_SESSION['csrf'] = bin2hex(random_bytes(32));
@@ -108,37 +108,6 @@ function auth_menu_bersih($rows): array
         ];
     }
     return $out;
-}
-
-/** Menu yang boleh dibuka user yang sedang login (dari sesi). */
-function auth_menu(): array
-{
-    $m = $_SESSION['menu'] ?? [];
-    return is_array($m) ? $m : [];
-}
-
-/** Apakah halaman (nama file, mis. "kunjungan.php") ada di menu user ini. */
-function auth_boleh_halaman(string $file): bool
-{
-    foreach (auth_menu() as $m) {
-        $path = (string)parse_url((string)$m['url'], PHP_URL_PATH);
-        if ($path !== '' && basename($path) === $file) return true;
-    }
-    return false;
-}
-
-/** Panggil di awal tiap halaman yang dibatasi menu: require_akses(); */
-function require_akses(): void
-{
-    if (auth_boleh_halaman(basename((string)($_SERVER['SCRIPT_NAME'] ?? '')))) return;
-    http_response_code(403);
-    if (auth_minta_json()) {
-        header('Content-Type: application/json; charset=utf-8');
-        echo json_encode(['error' => 'Anda tidak punya akses ke halaman ini.']);
-    } else {
-        echo 'Anda tidak punya akses ke halaman ini.';
-    }
-    exit;
 }
 
 function auth_staff_boleh(string $staff): bool
