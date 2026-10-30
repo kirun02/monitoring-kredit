@@ -333,6 +333,8 @@ function export_pdf_tabel(array $kol, array $baris, ?array $total, string $koson
 
 function export_pdf(array $spec, ?array $kop, string $nama): void
 {
+    @ini_set('display_errors', '0');          // pesan PHP ke log, bukan ke browser
+    ob_start(); 
     // kolom khusus Excel tidak ikut ke PDF
     $tanpaXlsx = function (array $kolom) { return array_values(array_filter($kolom, function ($c) { return empty($c['xlsx']); })); };
     // 'bagian' (opsional): beberapa tabel berurutan dalam satu PDF, tiap bagian = ['judul', 'kolom', 'rows', 'total']
@@ -395,6 +397,10 @@ function export_pdf(array $spec, ?array $kop, string $nama): void
     while (ob_get_level() > 0) ob_end_clean();
     header('Cache-Control: no-store, max-age=0');
     $pdf->Output($nama, 'I');                         // 'I' = tampil di browser (untuk dicetak)
+
+    while (ob_get_level() > 0) ob_end_clean();   // sekarang benar-benar membuang sisa output
+    header('Cache-Control: no-store, max-age=0');
+    $pdf->Output($nama, 'I');
 }
 
 // ---------------------------------------------------------------------------------------------

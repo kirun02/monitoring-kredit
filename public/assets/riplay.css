@@ -1,0 +1,21 @@
+/* Gaya formulir RIPLAY (dipakai semua halaman RIPLAY produk) */
+.rp-form .rp-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px 18px; }
+.rp-form .rp-grid .full { grid-column: 1 / -1; }
+.rp-form input[type=text], .rp-form input[type=date], .rp-form input[type=number], .rp-form textarea {
+    width: 100%; box-sizing: border-box; padding: 9px 11px; border: 1px solid #c5d3d1; border-radius: 8px; font: inherit; background: #fff;
+}
+.rp-form textarea { min-height: 64px; resize: vertical; }
+.rp-form select { width: 100%; box-sizing: border-box; padding: 9px 11px; border: 1px solid #c5d3d1; border-radius: 8px; font: inherit; background: #fff; }
+.rp-form input:focus, .rp-form textarea:focus, .rp-form select:focus { outline: 3px solid rgba(15, 107, 99, .25); border-color: #0F6B63; }
+.rp-opsi { display: flex; flex-wrap: wrap; gap: 8px 18px; padding-top: 6px; }
+.rp-opsi label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.rp-judul { margin: 0 0 12px; font-size: 1.05rem; color: #0F6B63; }
+.rp-kpi { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin-bottom: 10px; }
+.rp-kpi div { background: #F3F7F6; border-radius: 10px; padding: 10px 12px; }
+.rp-kpi b { display: block; font-size: 1.05rem; }
+#tblSim { width: 100%; border-collapse: collapse; margin-top: 8px; }
+#tblSim th, #tblSim td { padding: 5px 8px; border-bottom: 1px solid #e1e8e7; text-align: right; }
+#tblSim th:first-child, #tblSim td:first-child { text-align: center; }
+#tblSim thead th { background: #0F6B63; color: #fff; }
+#angsLainBox:not([hidden]) { display: grid; gap: 8px; margin-top: 8px; }
+.rp-aksi { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }

@@ -575,6 +575,8 @@ function export_progres(): array
             // rincian debitur untuk minggu ini; $x['minggu'][$idx] = ['bayar_pkk','bayar_bg' => masuk minggu ini, 'kum_pkk','kum_bg' => kumulatif, 'ada' => masih ada di nominatif]
             $idx = $minggu - 1;
             $mm  = $mgPakai[0];
+            // Bagian "4. Kredit lunas di minggu N" disembunyikan dulu. Ubah menjadi true untuk menampilkannya lagi (data $lunas tetap dihitung).
+            $tampilLunas = false;
             $bayar = []; $belum = []; $lunas = [];
             $sBy = ['kw_pkk' => 0.0, 'kw_bg' => 0.0, 'bayar_pkk' => 0.0, 'bayar_bg' => 0.0, 'kum_pkk' => 0.0, 'kum_bg' => 0.0];
             $sBl = ['tung_pkk' => 0.0, 'tung_bg' => 0.0, 'kw_pkk' => 0.0, 'kw_bg' => 0.0];
@@ -650,7 +652,7 @@ function export_progres(): array
             if (!empty($d['terpotong'])) $catMgg[] = 'Rincian debitur dibatasi ' . rp_teks(count((array)($d['rows'] ?? []))) . ' rekening pertama dari ' . rp_teks($a['rek']) . '. Pilih satu AO agar daftar lengkap; baris JUMLAH pada daftar tidak mencakup rekening yang terpotong.';
             $catMgg[] = 'Yang bayar = rekening kelompok awal yang ada pembayaran masuk pada minggu ini (selisih pembayaran bulan ini dibanding posisi sebelumnya). '
                 . 'Belum bayar = rekening yang masih ada di nominatif tetapi sampai akhir minggu ini belum ada pembayaran pokok maupun bunga (termasuk yang tanpa kewajiban bulan ini, misalnya kredit jatuh tempo). '
-                . 'Kredit lunas = rekening yang keluar dari nominatif pada minggu ini. '
+                . ($tampilLunas ? 'Kredit lunas = rekening yang keluar dari nominatif pada minggu ini. ' : '')
                 . 'Rekening yang sudah membayar pada minggu sebelumnya dan tidak ada pembayaran baru minggu ini tidak masuk daftar bayar maupun belum bayar.';
 
             $meta = $susunMeta(['Minggu ' . $minggu . ' (' . $rentang . ', posisi ' . $fmt($mm['tgl_posisi']) . ')   |   Yang bayar: ' . rp_teks(count($bayar))
@@ -661,16 +663,17 @@ function export_progres(): array
                 'judul'   => 'Progres Mingguan Tunggakan dan Gagal Bayar - Minggu ' . $minggu . ' (' . $rentang . ')',
                 'meta'    => $meta,
                 'kolom'   => $kolom,
-                'rows'    => array_merge($bayar, $belum, $lunas),      // hanya untuk pemeriksaan batas baris PDF; tabelnya diambil dari 'bagian'
-                'bagian'  => [
+                'rows'    => array_merge($bayar, $belum, $tampilLunas ? $lunas : []),      // hanya untuk pemeriksaan batas baris PDF; tabelnya diambil dari 'bagian'
+                'bagian'  => array_merge([
                     ['judul' => '1. Ringkasan minggu ' . $minggu, 'kolom' => $kolom, 'rows' => $rows, 'total' => null],
                     ['judul' => '2. Rincian yang bayar di minggu ' . $minggu . ' (' . count($bayar) . ' rekening)',
                         'kolom' => $kolBayar, 'rows' => $bayar, 'total' => $sBy, 'kosong' => 'Tidak ada rekening yang membayar pada minggu ini.'],
                     ['judul' => '3. Rincian yang belum bayar sampai akhir minggu ' . $minggu . ' (' . count($belum) . ' rekening)',
                         'kolom' => $kolBelum, 'rows' => $belum, 'total' => $sBl, 'kosong' => 'Semua rekening yang masih ada di nominatif sudah ada pembayaran.'],
+                ], $tampilLunas ? [
                     ['judul' => '4. Kredit lunas di minggu ' . $minggu . ' (keluar dari nominatif, ' . count($lunas) . ' rekening)',
                         'kolom' => $kolLunas, 'rows' => $lunas, 'total' => $sLn, 'kosong' => 'Tidak ada kredit yang lunas pada minggu ini.'],
-                ],
+                ] : []),
                 'catatan' => array_merge($catMgg, $catatan),
             ];
         }
@@ -770,6 +773,117 @@ function export_progres(): array
     ];
 }
 
+
+// ---------------------------------------------------------------------------------------------
+// LAPORAN: daftar debitur per posisi (menu Debitur): tanggal posisi, AO, kolek, hari tunggak, dan kotak Cari di halaman
+function export_debitur(): array
+{
+    $tgl   = trim((string)($_GET['tgl'] ?? ''));
+    $ao    = trim((string)($_GET['ao'] ?? ''));
+    $kolek = trim((string)($_GET['kolek'] ?? ''));
+    $aging = trim((string)($_GET['aging'] ?? ''));
+    $cari  = trim((string)($_GET['cari'] ?? ''));
+    if ($tgl !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $tgl))                export_galat(422, 'Tanggal posisi tidak valid.');
+    if ($ao !== '' && !preg_match('/^[A-Za-z0-9_.\-]{1,20}$/', $ao))                export_galat(422, 'Kode AO tidak valid.');
+    if ($kolek !== '' && !in_array($kolek, ['1', '2', '3', '4', '5', 'npl'], true)) export_galat(422, 'Kolek tidak valid.');
+    if ($aging !== '' && !in_array($aging, ['0', '1', '2', '3', '4'], true))        export_galat(422, 'Kelompok hari tunggak tidak valid.');
+    if (mb_strlen($cari) > 40) $cari = mb_substr($cari, 0, 40);
+
+    $p = [];
+    if ($tgl !== '')   $p['tgl']   = $tgl;
+    if ($ao !== '')    $p['ao']    = $ao;
+    if ($kolek !== '') $p['kolek'] = $kolek;
+    if ($aging !== '') $p['aging'] = $aging;
+
+    $r = api_call('debitur', ['params' => $p]);            // path_monitoring dipilih otomatis oleh api_path()
+    if (($r['status'] ?? '') !== 'success') export_galat(502, (string)($r['message'] ?? 'Data tidak dapat dimuat dari server.'));
+    $d = (array)($r['data'] ?? []);
+    if (!empty($d['empty'])) export_galat(404, 'Belum ada data posisi. Upload nominatif dulu.');
+
+    // kotak Cari di halaman: tiap kata harus ada di nama, norek, CIF, alamat, atau AO (tanpa membedakan huruf besar kecil)
+    $kata = $cari === '' ? [] : preg_split('/\s+/u', mb_strtolower($cari), -1, PREG_SPLIT_NO_EMPTY);
+
+    $rows = [];
+    $sum  = ['plafon' => 0.0, 'bakidebet' => 0.0, 'tung_pkk' => 0.0, 'tung_bg' => 0.0, 'tagihan' => 0.0, 'bayar' => 0.0];
+    $tungAda = !empty($d['total']['tung_tersedia']);
+    foreach (($d['rows'] ?? []) as $x) {
+        $row = [
+            'nama'      => trim((string)($x['nama'] ?? '')),
+            'norek'     => (string)($x['norek'] ?? ''),
+            'cif'       => (string)($x['cif'] ?? ''),
+            'ao'        => (string)($x['ao'] ?? ''),
+            'alamat'    => trim((string)($x['alamat'] ?? '')),
+            'plafon'    => (float)($x['plafon_raw'] ?? 0),
+            'bakidebet' => (float)($x['bakidebet_raw'] ?? 0),
+            'kolek'     => $x['kolek'] ?? null,
+            'hari'      => $x['hari'] ?? null,
+            'tung_pkk'  => $x['tung_pkk_raw'] ?? null,            // total tunggakan: pokok dan bunga terpisah, null = belum ada datanya
+            'tung_bg'   => $x['tung_bg_raw'] ?? null,
+            'tagihan'   => (float)($x['tagihan_raw'] ?? 0),
+            'bayar'     => (float)($x['bayar_raw'] ?? 0),
+            'pinjam'    => (string)($x['pinjam_raw'] ?? ''),
+            'tempo'     => (string)($x['tempo'] ?? ''),
+        ];
+        if ($kata) {
+            $tumpukan = mb_strtolower($row['nama'] . ' ' . $row['norek'] . ' ' . $row['cif'] . ' ' . $row['alamat'] . ' ' . $row['ao']);
+            foreach ($kata as $k) if (mb_strpos($tumpukan, $k) === false) continue 2;
+        }
+        foreach ($sum as $k => $_) $sum[$k] += $row[$k];
+        $rows[] = $row;
+    }
+    if (!$tungAda) unset($sum['tung_pkk'], $sum['tung_bg']);          // jangan tampilkan jumlah 0 untuk kolom yang belum ada datanya
+    $terpotong = !empty($d['terpotong']);
+
+    $lblKolek = ['' => 'Semua', 'npl' => 'NPL (kolek 3-5)', '1' => 'Kolek 1 (Lancar)', '2' => 'Kolek 2 (DPK)', '3' => 'Kolek 3 (Kurang Lancar)',
+                 '4' => 'Kolek 4 (Diragukan)', '5' => 'Kolek 5 (Macet)'];
+    $lblAging = ['' => 'Semua', '0' => 'Lancar (0 hari)', '1' => '1-30 hari', '2' => '31-60 hari', '3' => '61-90 hari', '4' => 'Lebih dari 90 hari'];
+    $namaAo = 'Semua AO';
+    $aoPilih = (string)($d['sel']['ao'] ?? '');
+    if ($aoPilih !== '') {
+        $namaAo = $aoPilih;
+        foreach (($d['aos'] ?? []) as $a) if ((string)($a['v'] ?? '') === $aoPilih) { $namaAo = (string)$a['l']; break; }
+    }
+    $posisi = preg_match('/^(\d{4})-(\d{2})-(\d{2})/', (string)($d['sel']['tgl'] ?? ''), $m) ? "$m[3]/$m[2]/$m[1]" : '–';
+
+    return [
+        'berkas' => 'daftar_debitur',
+        'judul'  => 'Daftar Debitur',
+        'meta'   => [
+            'Posisi data: ' . $posisi . '   |   AO: ' . $namaAo . '   |   Kolek: ' . $lblKolek[$kolek] . '   |   Hari tunggak: ' . $lblAging[$aging]
+                . ($cari !== '' ? '   |   Pencarian: ' . $cari : ''),
+            'Jumlah: ' . rp_teks(count($rows)) . ' debitur   |   Plafon: Rp ' . rp_teks($sum['plafon']) . '   |   Baki debet: Rp ' . rp_teks($sum['bakidebet'])
+                . ($tungAda ? '   |   Total tunggakan: pokok Rp ' . rp_teks($sum['tung_pkk']) . ', bunga Rp ' . rp_teks($sum['tung_bg']) : ''),
+            'Dicetak: ' . date('d/m/Y H:i') . ' oleh ' . (string)((auth_user() ?? [])['nama'] ?? '-'),
+        ],
+        'kolom'  => [
+            ['h' => 'No',             't' => 'no',    'w' => 4],
+            ['h' => 'Nama debitur',   'k' => 'nama',  'w' => 20],
+            ['h' => 'No. rekening',   'k' => 'norek', 'w' => 13],
+            ['h' => 'CIF',            'k' => 'cif',   'w' => 12, 'xlsx' => true],                  // hanya di Excel
+            ['h' => 'AO',             'k' => 'ao',    'w' => 11],
+            ['h' => 'Alamat',         'k' => 'alamat','w' => 22],
+            ['h' => 'Plafon (Rp)',    'k' => 'plafon',    't' => 'rp', 'w' => 12],
+            ['h' => 'Baki debet (Rp)','k' => 'bakidebet', 't' => 'rp', 'w' => 12],
+            ['h' => 'Kolek',          'k' => 'kolek', 't' => 'int', 'w' => 5],
+            ['h' => 'Hari tunggak',   'k' => 'hari',  't' => 'int', 'w' => 7],
+            ['h' => 'Total tunggakan pokok (Rp)', 'k' => 'tung_pkk', 't' => 'rp', 'w' => 11],
+            ['h' => 'Total tunggakan bunga (Rp)', 'k' => 'tung_bg',  't' => 'rp', 'w' => 11],
+            ['h' => 'Tagihan bln ini (Rp)', 'k' => 'tagihan', 't' => 'rp', 'w' => 11],
+            ['h' => 'Bayar bln ini (Rp)',   'k' => 'bayar',   't' => 'rp', 'w' => 11],
+            ['h' => 'Tgl pinjam',     'k' => 'pinjam','t' => 'date', 'w' => 9],
+            ['h' => 'Jatuh tempo',    'k' => 'tempo', 'w' => 9],
+        ],
+        'rows'    => $rows,
+        'total'   => $terpotong ? null : $sum,
+        'catatan' => array_values(array_filter([
+            $terpotong ? 'Daftar dibatasi ' . ($d['batas'] ?? '20.000') . ' baris pertama (urut hari tunggak terbanyak). Persempit filter untuk melihat seluruhnya. Baris JUMLAH tidak ditampilkan.' : null,
+            !$tungAda ? 'Total tunggakan belum tersedia untuk posisi ini (diupload sebelum kolom ttung_pkk dan ttung_bg ada).' : null,
+            'Urutan: hari tunggak terbanyak. Total tunggakan pokok dan bunga ditampilkan terpisah. Tagihan bulan ini = kewajiban pokok + bunga bulan ini; bayar bulan ini = pembayaran pokok + bunga bulan ini.',
+        ])),
+    ];
+}
+
+
 // ---------------------------------------------------------------------------------------------
 // DAFTAR LAPORAN: kode menu (hak akses), batas baris PDF, fungsi pembangun
 // ---------------------------------------------------------------------------------------------
@@ -779,6 +893,7 @@ $LAPORAN = [
     'prioritas'         => ['menu' => 'web_prioritas',   'batas_pdf' => 1500, 'bangun' => 'export_prioritas'],
     'lap_absensi'       => ['menu' => 'web_lap_absensi', 'batas_pdf' => 1500, 'bangun' => 'export_absensi'],
     'progres'           => ['menu' => 'web_progres',     'batas_pdf' => 1500, 'bangun' => 'export_progres'],
+    'debitur'           => ['menu' => 'web_debitur',     'batas_pdf' => 1500, 'bangun' => 'export_debitur'],
 ];
 
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') export_galat(405, 'Method tidak diizinkan.');

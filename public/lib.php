@@ -26,7 +26,7 @@ function page_head(string $title, string $active): void {
 
     echo '<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
        . '<title>' . h($title) .'</title>'
-       . '<link rel="stylesheet" href="assets/style.css?v=2">'
+       . '<link rel="stylesheet" href="assets/style.css?v=3">'
        . '<link rel="stylesheet" href="assets/mobile.css">'
        . '<link rel="stylesheet" href="assets/header-rapi.css?v=1">'
        . '<script src="assets/menu.js?v=1" defer></script>'
