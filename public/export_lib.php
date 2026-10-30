@@ -14,7 +14,7 @@ declare(strict_types=1);
  *   'judul'   => 'Judul laporan',
  *   'meta'    => ['Posisi data: ...', 'Filter: ...'],   // baris keterangan di bawah judul
  *   'kolom'   => [ ['h' => 'Nama', 'k' => 'nama', 't' => 'text', 'w' => 24, 'xlsx' => false], ... ],
- *                 // t: text | int | rp | date | no (nomor urut); w: lebar; xlsx => true: kolom hanya di Excel
+ *                 // t: text | int | rp | date | datetime | no (nomor urut); w: lebar; xlsx => true: kolom hanya di Excel
  *   'rows'    => [ ['nama' => '...', ...], ... ],
  *   'total'   => ['baki' => 123, ...] | null,      // baris JUMLAH, kunci = 'k' kolom
  *   'catatan' => ['...'],                          // baris catatan di bawah tabel
@@ -98,6 +98,7 @@ function export_isi($ws, string $coord, $v, string $t): void
             if (is_numeric($v)) $ws->setCellValueExplicit($coord, 0 + $v, DataType::TYPE_NUMERIC);
             return;
         case 'date':
+        case 'datetime':
             $ts = strtotime((string)$v);
             if ($ts !== false) $ws->setCellValueExplicit($coord, XlDate::PHPToExcel($ts), DataType::TYPE_NUMERIC);
             return;
@@ -209,6 +210,10 @@ function export_xlsx(array $spec, ?array $kop, string $nama): void
                 $st->getNumberFormat()->setFormatCode('dd/mm/yyyy');
                 $st->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
                 break;
+            case 'datetime':
+                $st->getNumberFormat()->setFormatCode('dd/mm/yyyy hh:mm');
+                $st->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+                break;
             default:
                 $st->getAlignment()->setWrapText(true);
         }
@@ -278,6 +283,7 @@ function export_fmt_pdf($v, string $t, int $no): string
         case 'int':  return is_numeric($v) ? (string)(int)$v : h_e($v);
         case 'rp':   return is_numeric($v) ? number_format((float)$v, 0, ',', '.') : h_e($v);
         case 'date': $ts = strtotime((string)$v); return $ts === false ? h_e($v) : date('d/m/Y', $ts);
+        case 'datetime': $ts = strtotime((string)$v); return $ts === false ? h_e($v) : date('d/m/Y H:i', $ts);
         default:     return h_e($v);
     }
 }
@@ -331,7 +337,7 @@ function export_pdf(array $spec, ?array $kop, string $nama): void
         $b .= '<tr>';
         foreach ($kol as $c) {
             $t   = (string)($c['t'] ?? 'text');
-            $cls = ($t === 'rp') ? ' class="num"' : (in_array($t, ['int', 'no', 'date'], true) ? ' class="ctr"' : '');
+            $cls = ($t === 'rp') ? ' class="num"' : (in_array($t, ['int', 'no', 'date', 'datetime'], true) ? ' class="ctr"' : '');
             $b  .= '<td' . $cls . '>' . export_fmt_pdf($t === 'no' ? null : ($row[$c['k'] ?? ''] ?? null), $t, $no) . '</td>';
         }
         $b .= '</tr>';

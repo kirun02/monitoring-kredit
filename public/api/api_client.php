@@ -92,7 +92,7 @@ function api_path($jenis)
  * Panggil API. $isi = isi sebenarnya (username/password atau ['params' => [...]]); selalu dikirim terenkripsi.
  * Mengembalikan isi respons yang sudah didekripsi (array dengan 'status' dan 'data'/'message').
  */
-function api_call($jenis, array $isi = [], $path = null)
+/*function api_call($jenis, array $isi = [], $path = null)
 {
     $c      = api_cfg();
     $path   = $path ?: api_path($jenis);        // tadinya: $path ?: $c['path_data']
@@ -132,7 +132,54 @@ function api_call($jenis, array $isi = [], $path = null)
         return $out;
     }
     throw new RuntimeException('API menolak token.');
+}*/
+
+/**
+ * Panggil API ($timeout = detik, opsional; kosong = 'timeout' di config.api.php). $isi = isi sebenarnya (username/password atau ['params' => [...]]); selalu dikirim terenkripsi.
+ * Mengembalikan isi respons yang sudah didekripsi (array dengan 'status' dan 'data'/'message').
+ */
+function api_call($jenis, array $isi = [], $path = null, $timeout = null)
+{
+    $c      = api_cfg();
+    $path   = $path ?: api_path($jenis);        // tadinya: $path ?: $c['path_data']
+    $crypto = new MonCrypto($c['enc_key']);
+
+    for ($try = 0; $try < 2; $try++) {
+        $bearer = api_token($try > 0);
+        $ts     = date(DATE_ISO8601);
+
+        // body luar: hanya jenis_req + blob terenkripsi (inilah yang ditandatangani dan masuk ke log API)
+        $body = json_encode([
+            'jenis_req' => $jenis,
+            'enc'       => $crypto->encrypt(json_encode($isi, API_JSON), MonCrypto::aad('req', $ts, $jenis)),
+        ], API_JSON);
+
+        $signing = 'POST|' . $path . '|' . $bearer . '|' . strtolower(hash('sha256', $body)) . '|' . $ts;
+        $sig     = base64_encode(hash_hmac('SHA512', $signing, $c['hmac_key'], true));
+
+        list($code, $j) = api_http($path, [
+            'Content-Type: application/json',
+            'Authorization: Bearer ' . $bearer,
+            'x-timestamp: ' . $ts,
+            'x-api-key: ' . $c['api_key'],
+            'x-secret-key: ' . $c['secret_key'],
+            'x-signature: ' . $sig,
+        ], $body, $timeout);
+
+        if ($code === 401 && $try === 0) continue;                  // token habis: ambil baru, ulangi sekali
+
+        if ($code !== 200)        throw new RuntimeException('API membalas HTTP ' . $code);   // jangan ikutkan isi balasan (bisa memuat detail tanda tangan)
+        if (empty($j['enc']))     throw new RuntimeException('Respons API tidak terenkripsi, ditolak.');   // tidak ada jalur mundur ke teks biasa
+
+        $plain = $crypto->decrypt($j['enc'], MonCrypto::aad('res', $ts, $jenis));
+        if ($plain === false)     throw new RuntimeException('Respons API tidak dapat diverifikasi.');
+        $out = json_decode($plain, true);
+        if (!is_array($out))      throw new RuntimeException('Isi respons API tidak valid.');
+        return $out;
+    }
+    throw new RuntimeException('API menolak token.');
 }
+
 
 /**
  * Untuk halaman JSON di hosting (mis. api.php): teruskan filter dari $_GET ke API, kirim hasilnya ke browser.

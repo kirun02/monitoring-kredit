@@ -3,8 +3,7 @@
  * Unduh laporan ke Excel / PDF (PhpSpreadsheet). Letak: folder api/
  *
  *   GET export.php?laporan=belum_bayar&format=xlsx|pdf&nama=&kolek=
- *   GET export.php?laporan=prioritas&format=xlsx|pdf&tgl=&ao=&min=
- *   GET export.php?laporan=lap_absensi&format=xlsx|pdf&dari=&sampai=&karyawan=&status=
+ *   GET export.php?laporan=rencana_kunjungan&format=xlsx|pdf&tgl1=&tgl2=&status=&id_user=
  *
  * Hanya laporan yang terdaftar di $LAPORAN, dan hanya filter yang di-whitelist per laporan.
  * Data diambil lewat API backend (terenkripsi) dalam SATU panggilan khusus cetak (tanpa halaman; backend hanya memasang batas pengaman).
@@ -88,6 +87,16 @@ function export_belum_bayar(): array
             'Belum bayar = ada kewajiban bulan ini (pokok + bunga) tetapi pembayaran pokok dan bunga bulan ini nol, menurut data posisi terakhir. Urut: paling lama menunggak, lalu baki debet terbesar.',
         ])),
     ];
+}
+
+// ---------------------------------------------------------------------------------------------
+// LAPORAN: rencana kunjungan
+//   export.php?laporan=rencana_kunjungan&format=xlsx|pdf&tgl1=&tgl2=&status=&id_user=
+//   AO dipaksa melihat rencananya sendiri; admin/pimpinan boleh memilih AO (kosong = semua).
+// ---------------------------------------------------------------------------------------------
+function tgl_ok($v): bool
+{
+    return (bool)preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', (string)$v, $m) && checkdate((int)$m[2], (int)$m[3], (int)$m[1]);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -251,13 +260,254 @@ function export_absensi(): array
     ];
 }
 
+
+function export_rencana_kunjungan(): array
+{
+    $u      = auth_user() ?? [];
+    $idUser = (int)($u['id'] ?? ($u['id_user'] ?? 0));
+    $ao     = (string)($u['staff'] ?? '') === 'ao';
+
+    $tgl1 = (string)($_GET['tgl1'] ?? date('Y-m-01'));
+    $tgl2 = (string)($_GET['tgl2'] ?? date('Y-m-d'));
+    if (!tgl_ok($tgl1) || !tgl_ok($tgl2) || $tgl1 > $tgl2)    export_galat(422, 'Rentang tanggal tidak valid.');
+    if (strtotime($tgl2) - strtotime($tgl1) > 92 * 86400)     export_galat(422, 'Rentang tanggal maksimal 3 bulan.');
+    $nama_status = ['belum' => 'Belum', 'monitoring whatsapp' => 'Monitoring WA', 'dikunjungi' => 'Dikunjungi'];
+    $status  = isset($nama_status[(string)($_GET['status'] ?? '')]) ? (string)$_GET['status'] : '';
+    $idPilih = $ao ? $idUser : max(0, (int)($_GET['id_user'] ?? 0));
+
+    $r = api_call('laporan', ['tgl1' => $tgl1, 'tgl2' => $tgl2, 'id_user' => $idPilih > 0 ? (string)$idPilih : '', 'status' => $status], api_cfg()['path_rencana']);
+    if (($r['status'] ?? '') !== 'success') export_galat(502, (string)($r['message'] ?? 'Data tidak dapat dimuat dari server.'));
+
+    $rows = [];
+    $hit  = ['belum' => 0, 'monitoring whatsapp' => 0, 'dikunjungi' => 0];
+    $aoNama = '';
+    foreach (($r['rows'] ?? []) as $x) {
+        $s = (string)($x['status'] ?? '');
+        if (isset($hit[$s])) $hit[$s]++;
+        $aoNama = $aoNama === '' ? (string)($x['nmuser'] ?? '') : $aoNama;
+        $rows[] = [
+            'tanggal'    => (string)($x['tanggal'] ?? ''),
+            'nama'       => trim((string)($x['nama'] ?? '')),
+            'rekening'   => (string)($x['rekening'] ?? ''),
+            'nmuser'     => (string)($x['nmuser'] ?? ''),
+            'status'     => $nama_status[$s] ?? $s,
+            'waktu'      => (string)($x['waktu_kunjungan'] ?? ''),
+            'keterangan' => trim((string)($x['keterangan'] ?? '')),
+            'ket_kun'    => trim((string)($x['ket_kunjungan'] ?? '')),
+        ];
+    }
+    $fmt = function ($t) { return date('d/m/Y', strtotime($t)); };
+    $filter = [];
+    if ($status !== '') $filter[] = 'status ' . $nama_status[$status];
+    if ($idPilih > 0)   $filter[] = 'AO ' . ($aoNama !== '' ? $aoNama : '#' . $idPilih);
+
+    return [
+        'berkas' => 'rencana_kunjungan',
+        'judul'  => 'Laporan Rencana Kunjungan',
+        'meta'   => [
+            'Periode: ' . $fmt($tgl1) . ' s/d ' . $fmt($tgl2) . '   |   Filter: ' . ($filter ? implode('; ', $filter) : 'semua AO, semua status'),
+            'Jumlah rencana: ' . count($rows) . '   |   Belum: ' . $hit['belum'] . '   |   Monitoring WA: ' . $hit['monitoring whatsapp'] . '   |   Dikunjungi: ' . $hit['dikunjungi'],
+            'Dicetak: ' . date('d/m/Y H:i') . ' oleh ' . (string)($u['nama'] ?? '-'),
+        ],
+        'kolom'  => [
+            ['h' => 'No',              't' => 'no',       'w' => 5],
+            ['h' => 'Tanggal',         'k' => 'tanggal',  't' => 'date',     'w' => 11],
+            ['h' => 'Nama debitur',    'k' => 'nama',     'w' => 24],
+            ['h' => 'No. rekening',    'k' => 'rekening', 'w' => 14],
+            ['h' => 'AO',              'k' => 'nmuser',   'w' => 16],
+            ['h' => 'Status',          'k' => 'status',   'w' => 14],
+            ['h' => 'Waktu kunjungan', 'k' => 'waktu',    't' => 'datetime', 'w' => 15],
+            ['h' => 'Keterangan rencana', 'k' => 'keterangan', 'w' => 26],
+            ['h' => 'Hasil kunjungan', 'k' => 'ket_kun',  'w' => 28],
+        ],
+        'rows'    => $rows,
+        'total'   => null,
+        'catatan' => ['Urut: tanggal rencana, lalu nama AO.'],
+    ];
+}
+
+
+// ---------------------------------------------------------------------------------------------
+// LAPORAN: progres mingguan (rekening belum bayar di posisi tanggal awal, dilacak tiap minggu)
+// Sumber: jenis_req 'progres' (endpoint Monitoring).
+//   PDF   -> ringkasan per minggu (jenis 'progres').
+//   Excel -> rincian per debitur dengan kolom pembayaran tiap minggu (jenis 'progres_detail').
+// ---------------------------------------------------------------------------------------------
+function export_progres(): array
+{
+    $awal  = trim((string)($_GET['awal'] ?? ''));
+    $akhir = trim((string)($_GET['akhir'] ?? ''));
+    $ao    = trim((string)($_GET['ao'] ?? ''));
+    $pdf   = (string)($_GET['format'] ?? 'xlsx') === 'pdf';
+
+    $tglOk = function (string $t): bool { $d = DateTime::createFromFormat('Y-m-d', $t); return $d && $d->format('Y-m-d') === $t; };
+    if (($awal === '') !== ($akhir === ''))                     export_galat(422, 'Isi tanggal awal dan tanggal akhir, atau kosongkan keduanya.');
+    if ($awal !== '' && (!$tglOk($awal) || !$tglOk($akhir)))    export_galat(422, 'Tanggal tidak valid.');
+    if ($awal !== '' && $akhir < $awal)                         export_galat(422, 'Tanggal akhir tidak boleh sebelum tanggal awal.');
+    if ($ao !== '' && !preg_match('/^[A-Za-z0-9_.\-]{1,20}$/', $ao)) export_galat(422, 'Kode AO tidak valid.');
+
+    $p = [];
+    if ($awal !== '') { $p['awal'] = $awal; $p['akhir'] = $akhir; }
+    if ($ao !== '')   $p['ao'] = $ao;
+
+    $r = api_call($pdf ? 'progres' : 'progres_detail', ['params' => $p], api_cfg()['path_monitoring'], 120);
+    if (($r['status'] ?? '') !== 'success') export_galat(502, (string)($r['message'] ?? 'Data tidak dapat dimuat dari server.'));
+    $d = (array)($r['data'] ?? []);
+    if (!empty($d['error'])) export_galat(422, (string)$d['error']);
+    if (!empty($d['empty'])) export_galat(404, (string)($d['pesan'] ?? 'Belum ada data.'));
+
+    $a     = (array)$d['awal'];
+    $mg    = (array)($d['minggu'] ?? []);
+    $tgOk  = !empty($d['tung_tersedia']);
+    $fmt   = function ($t): string { $x = strtotime((string)$t); return $x === false ? '–' : date('d/m/Y', $x); };
+    $pend  = function ($t): string { $x = strtotime((string)$t); return $x === false ? '–' : date('d/m', $x); };
+    $persen = function ($v): string { return $v === null ? '–' : number_format((float)$v, 1, ',', '.') . '%'; };
+    $namaAo = 'Semua AO';
+    if (($d['sel']['ao'] ?? '') !== '') {
+        $namaAo = (string)$d['sel']['ao'];
+        foreach (($d['aos'] ?? []) as $x) if ((string)($x['v'] ?? '') === $namaAo) { $namaAo = (string)$x['l']; break; }
+    }
+
+    $meta = [
+        'Periode tagihan: ' . (string)$d['periode'] . '   |   Rentang: ' . $fmt($d['sel']['awal']) . ' s/d ' . $fmt($d['sel']['akhir'])
+            . '   |   AO: ' . $namaAo . '   |   Kelompok awal dari posisi ' . $fmt($d['posisi_awal']),
+        'Belum bayar di posisi awal: ' . rp_teks($a['rek']) . ' rekening   |   Baki debet: Rp ' . rp_teks($a['baki'])
+            . ($tgOk ? '   |   Tunggakan pokok: Rp ' . rp_teks($a['tung_pkk']) . ', bunga: Rp ' . rp_teks($a['tung_bg']) : '')
+            . '   |   Kewajiban bulan ini: pokok Rp ' . rp_teks($a['kw_pkk']) . ', bunga Rp ' . rp_teks($a['kw_bg']),
+    ];
+    if (!$pdf) {                                   // Excel: tabelnya rincian debitur, jadi ringkasan mingguan ditaruh di keterangan
+        foreach ($mg as $m) {
+            $meta[] = 'Minggu ' . $m['no'] . ' (' . $pend($m['dari']) . '–' . $pend($m['sampai']) . ', posisi ' . $pend($m['tgl_posisi']) . '): bayar Rp '
+                . rp_teks($m['bayar_total']) . ' (pokok Rp ' . rp_teks($m['bayar_pkk']) . ', bunga Rp ' . rp_teks($m['bayar_bg']) . ')   |   tertagih '
+                . $persen($m['pct_tertagih']) . '   |   sudah bayar ' . rp_teks($m['rek_bayar']) . ' rek, masih belum ' . rp_teks($m['rek_belum'])
+                . ' rek' . ($m['rek_hilang'] ? ', tidak ada di posisi ' . rp_teks($m['rek_hilang']) . ' rek' : '');
+        }
+    }
+    $meta[] = 'Dicetak: ' . date('d/m/Y H:i') . ' oleh ' . (string)((auth_user() ?? [])['nama'] ?? '-');
+
+    $catatan = array_map('strval', (array)($d['peringatan'] ?? []));
+    $catatan[] = 'Kelompok awal = rekening dengan kewajiban bulan ini tetapi belum ada pembayaran pokok maupun bunga pada posisi tanggal awal. '
+        . 'Pembayaran tiap minggu = selisih pembayaran bulan ini antara dua posisi, hanya untuk rekening kelompok awal. '
+        . '"Tertagih" membandingkan pembayaran dengan kewajiban bulan ini (maksimal sebesar kewajiban tiap rekening).';
+
+    // ---------------------------- PDF: ringkasan per minggu ----------------------------
+    if ($pdf) {
+        $rows = []; $sP = 0.0; $sB = 0.0;
+        foreach ($mg as $m) {
+            $sP += (float)$m['bayar_pkk']; $sB += (float)$m['bayar_bg'];
+            $rows[] = [
+                'mgg' => 'Minggu ' . $m['no'] . ' (' . $pend($m['dari']) . '–' . $pend($m['sampai']) . '), posisi ' . $pend($m['tgl_posisi']),
+                'bayar_pkk' => (float)$m['bayar_pkk'], 'bayar_bg' => (float)$m['bayar_bg'], 'bayar_total' => (float)$m['bayar_total'],
+                'pct' => $persen($m['pct_tertagih']),
+                'rek_bayar' => $m['rek_bayar'], 'rek_lunas' => $m['rek_lunas'], 'rek_belum' => $m['rek_belum'], 'rek_hilang' => $m['rek_hilang'],
+                'sisa_kw' => (float)$m['sisa_kw'], 'sisa_tung_pkk' => $m['sisa_tung_pkk'], 'sisa_tung_bg' => $m['sisa_tung_bg'],
+                'kolek_memburuk' => $m['kolek_memburuk'], 'masuk_npl' => $m['masuk_npl'],
+            ];
+        }
+        $kolom = [
+            ['h' => 'Minggu',               'k' => 'mgg',            'w' => 22],
+            ['h' => 'Bayar pokok (Rp)',     'k' => 'bayar_pkk',      't' => 'rp',  'w' => 13],
+            ['h' => 'Bayar bunga (Rp)',     'k' => 'bayar_bg',       't' => 'rp',  'w' => 13],
+            ['h' => 'Total bayar (Rp)',     'k' => 'bayar_total',    't' => 'rp',  'w' => 14],
+            ['h' => 'Tertagih',             'k' => 'pct',            'w' => 8],
+            ['h' => 'Sudah bayar (rek)',    'k' => 'rek_bayar',      't' => 'int', 'w' => 8],
+            ['h' => 'Lunas (rek)',          'k' => 'rek_lunas',      't' => 'int', 'w' => 7],
+            ['h' => 'Masih belum (rek)',    'k' => 'rek_belum',      't' => 'int', 'w' => 8],
+            ['h' => 'Tidak ada di posisi',  'k' => 'rek_hilang',     't' => 'int', 'w' => 8],
+            ['h' => 'Sisa kewajiban (Rp)',  'k' => 'sisa_kw',        't' => 'rp',  'w' => 14],
+        ];
+        if ($tgOk) {
+            $kolom[] = ['h' => 'Sisa tunggakan pokok (Rp)', 'k' => 'sisa_tung_pkk', 't' => 'rp', 'w' => 14];
+            $kolom[] = ['h' => 'Sisa tunggakan bunga (Rp)', 'k' => 'sisa_tung_bg',  't' => 'rp', 'w' => 14];
+        }
+        $kolom[] = ['h' => 'Kolek memburuk', 'k' => 'kolek_memburuk', 't' => 'int', 'w' => 8];
+        $kolom[] = ['h' => 'Masuk NPL',      'k' => 'masuk_npl',      't' => 'int', 'w' => 7];
+
+        return [
+            'berkas'  => 'progres_mingguan',
+            'judul'   => 'Progres Mingguan Tunggakan dan Gagal Bayar',
+            'meta'    => $meta,
+            'kolom'   => $kolom,
+            'rows'    => $rows,
+            'total'   => ['bayar_pkk' => $sP, 'bayar_bg' => $sB, 'bayar_total' => $sP + $sB],
+            'catatan' => $catatan,
+        ];
+    }
+
+    // ---------------------------- Excel: rincian per debitur ----------------------------
+    $terpotong = !empty($d['terpotong']);
+    $rows = [];
+    $sum  = ['tung_pkk' => 0.0, 'tung_bg' => 0.0, 'kw_pkk' => 0.0, 'kw_bg' => 0.0, 'bayar_total' => 0.0, 'tung_pkk_akhir' => 0.0, 'tung_bg_akhir' => 0.0];
+    foreach ($mg as $i => $_) $sum['m' . ($i + 1)] = 0.0;
+
+    foreach (($d['rows'] ?? []) as $x) {
+        $row = [
+            'nama' => trim((string)($x['nama'] ?? '')), 'norek' => (string)($x['norek'] ?? ''), 'cif' => (string)($x['cif'] ?? ''),
+            'ao' => (string)($x['ao'] ?? ''), 'kolek' => $x['kolek'] ?? null, 'hari' => $x['hari'] ?? null,
+            'tung_pkk' => $x['tung_pkk'] ?? null, 'tung_bg' => $x['tung_bg'] ?? null,
+            'kw_pkk' => (float)($x['kw_pkk'] ?? 0), 'kw_bg' => (float)($x['kw_bg'] ?? 0),
+            'bayar_total' => (float)($x['bayar_total'] ?? 0),
+            'kolek_akhir' => $x['kolek_akhir'] ?? null, 'hari_akhir' => $x['hari_akhir'] ?? null,
+            'tung_pkk_akhir' => $x['tung_pkk_akhir'] ?? null, 'tung_bg_akhir' => $x['tung_bg_akhir'] ?? null,
+            'status' => (string)($x['status'] ?? ''),
+        ];
+        foreach ((array)($x['minggu'] ?? []) as $i => $w) $row['m' . ($i + 1)] = (float)($w['bayar'] ?? 0);
+        foreach ($sum as $k => $_) $sum[$k] += (float)($row[$k] ?? 0);
+        $rows[] = $row;
+    }
+
+    $kolom = [
+        ['h' => 'No',            't' => 'no',   'w' => 5],
+        ['h' => 'Nama debitur',  'k' => 'nama', 'w' => 24],
+        ['h' => 'No. rekening',  'k' => 'norek','w' => 14],
+        ['h' => 'CIF',           'k' => 'cif',  'w' => 12],
+        ['h' => 'AO',            'k' => 'ao',   'w' => 16],
+        ['h' => 'Kolek awal',    'k' => 'kolek','t' => 'int', 'w' => 7],
+        ['h' => 'Hari tunggak awal', 'k' => 'hari', 't' => 'int', 'w' => 9],
+    ];
+    if ($tgOk) {
+        $kolom[] = ['h' => 'Tunggakan pokok (Rp)', 'k' => 'tung_pkk', 't' => 'rp', 'w' => 15];
+        $kolom[] = ['h' => 'Tunggakan bunga (Rp)', 'k' => 'tung_bg',  't' => 'rp', 'w' => 15];
+    }
+    $kolom[] = ['h' => 'Kewajiban bulan ini pokok (Rp)', 'k' => 'kw_pkk', 't' => 'rp', 'w' => 16];
+    $kolom[] = ['h' => 'Kewajiban bulan ini bunga (Rp)', 'k' => 'kw_bg',  't' => 'rp', 'w' => 16];
+    foreach ($mg as $i => $m) {
+        $kolom[] = ['h' => 'Bayar minggu ' . $m['no'] . ' (' . $pend($m['dari']) . '–' . $pend($m['sampai']) . ') (Rp)', 'k' => 'm' . ($i + 1), 't' => 'rp', 'w' => 15];
+    }
+    $kolom[] = ['h' => 'Total bayar (Rp)', 'k' => 'bayar_total', 't' => 'rp', 'w' => 15];
+    $kolom[] = ['h' => 'Kolek akhir',       'k' => 'kolek_akhir', 't' => 'int', 'w' => 7];
+    $kolom[] = ['h' => 'Hari tunggak akhir','k' => 'hari_akhir',  't' => 'int', 'w' => 9];
+    if ($tgOk) {
+        $kolom[] = ['h' => 'Sisa tunggakan pokok (Rp)', 'k' => 'tung_pkk_akhir', 't' => 'rp', 'w' => 15];
+        $kolom[] = ['h' => 'Sisa tunggakan bunga (Rp)', 'k' => 'tung_bg_akhir',  't' => 'rp', 'w' => 15];
+    }
+    $kolom[] = ['h' => 'Status akhir', 'k' => 'status', 'w' => 22];
+
+    if ($terpotong) {
+        array_unshift($catatan, 'Rincian dibatasi ' . rp_teks(count($rows)) . ' baris pertama dari ' . rp_teks($a['rek']) . ' rekening. Pilih satu AO untuk melihat seluruhnya. Baris JUMLAH tidak ditampilkan.');
+    }
+    if (!$tgOk) unset($sum['tung_pkk'], $sum['tung_bg'], $sum['tung_pkk_akhir'], $sum['tung_bg_akhir']);
+
+    return [
+        'berkas'  => 'progres_mingguan_rincian',
+        'judul'   => 'Progres Mingguan Tunggakan dan Gagal Bayar (Rincian Debitur)',
+        'meta'    => $meta,
+        'kolom'   => $kolom,
+        'rows'    => $rows,
+        'total'   => $terpotong ? null : $sum,
+        'catatan' => $catatan,
+    ];
+}
+
 // ---------------------------------------------------------------------------------------------
 // DAFTAR LAPORAN: kode menu (hak akses), batas baris PDF, fungsi pembangun
 // ---------------------------------------------------------------------------------------------
 $LAPORAN = [
-    'belum_bayar' => ['menu' => 'web_belum_bayar', 'batas_pdf' => 1500, 'bangun' => 'export_belum_bayar'],
-    'prioritas'   => ['menu' => 'web_prioritas',   'batas_pdf' => 1500, 'bangun' => 'export_prioritas'],     // CEK kode menu ini di sistem hak akses
-    'lap_absensi' => ['menu' => 'web_lap_absensi', 'batas_pdf' => 1500, 'bangun' => 'export_absensi'],
+    'belum_bayar'       => ['menu' => 'web_belum_bayar', 'batas_pdf' => 1500, 'bangun' => 'export_belum_bayar'],
+    'rencana_kunjungan' => ['menu' => 'web_rencana',     'batas_pdf' => 1500, 'bangun' => 'export_rencana_kunjungan'],
+    'prioritas'         => ['menu' => 'web_prioritas',   'batas_pdf' => 1500, 'bangun' => 'export_prioritas'],
+    'lap_absensi'       => ['menu' => 'web_lap_absensi', 'batas_pdf' => 1500, 'bangun' => 'export_absensi'],
+    'progres'           => ['menu' => 'web_progres',     'batas_pdf' => 1500, 'bangun' => 'export_progres'],
 ];
 
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') export_galat(405, 'Method tidak diizinkan.');

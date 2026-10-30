@@ -14,6 +14,7 @@ return [
     'path_absensi'      => '/api_monitoring/absensi',
     'path_karyawan'     => '/api_monitoring/karyawan',
     'path_pengguna'     => '/api_monitoring/pengguna',
+    'path_rencana'      => '/api_monitoring/rencana',
     'api_key'           => $_ENV['MON_API_KEY'],
     'secret_key'        => $_ENV['MON_API_SECRET'],
     'hmac_key'          => $_ENV['MON_API_HMAC'],

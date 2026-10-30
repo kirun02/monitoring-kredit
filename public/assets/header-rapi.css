@@ -1,15 +1,14 @@
 /* =====================================================================
-   Rapikan header di layar lebar. Tempel di PALING BAWAH assets/mobile.css.
-   Isinya menyamakan desktop dengan susunan yang sudah ada untuk HP:
+   Header + menu dropdown. GANTI blok header-rapi.css yang dulu kamu tempel di paling bawah
+   assets/mobile.css dengan isi file ini (jangan ditumpuk).
      baris 1 :  Monitoring Kredit ................ Administrator [Keluar]
-     baris 2 :  Dashboard  Pergerakan  Prioritas tagih  ...   (menu aktif: garis hijau, kelas .on)
-   Tidak mengubah aturan HP di mobile.css.
+     baris 2 :  Dashboard  Kredit v  Kunjungan v  Karyawan v  Upload Nominatif  Hak Akses
    ===================================================================== */
 
 .top { gap: 0 12px; padding: 0 24px; }
 .top .brand { padding: 12px 0; }
 
-/* menu: satu baris penuh di bawah, bisa digeser bila terlalu panjang */
+/* menu: satu baris penuh di bawah, bisa digeser di layar sempit */
 .top nav {
   order: 3; flex: 1 0 100%;
   overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none;
@@ -25,11 +24,49 @@
 /* nama user + tombol keluar: baris 1, rata kanan */
 .top nav ~ * { order: 2; color: rgba(255, 255, 255, .8); }
 .top nav + * { margin-left: auto; }
-.top .muted { color: rgba(255, 255, 255, .8); }   /* "Administrator" tadinya abu gelap di atas latar gelap */
+.top .muted { color: rgba(255, 255, 255, .8); }
 
-.top .btn, .top button {
+.top > form .btn, .top > form button {            /* hanya tombol Keluar, bukan tombol dropdown */
   height: 34px; padding: 0 14px; font-size: 13px;
   color: #fff; background: transparent;
   border: 1px solid rgba(255, 255, 255, .45);
 }
-.top .btn:hover, .top button:hover { background: rgba(255, 255, 255, .12); }
+.top > form .btn:hover, .top > form button:hover { background: rgba(255, 255, 255, .12); }
+
+/* ---------- dropdown ---------- */
+.top nav .dd { flex: none; }
+
+.top nav .dd-t {                                   /* tombol induk, tampil seperti tautan menu */
+  display: flex; align-items: center; gap: 7px;
+  min-height: 44px; padding: 0 14px;
+  font: inherit; white-space: nowrap; cursor: pointer;
+  color: #CFE0DC; background: none; border: 0; border-radius: 0;
+}
+.top nav .dd-t:hover,
+.top nav .dd.buka .dd-t { color: #fff; background: rgba(255, 255, 255, .07); }
+.top nav .dd-t.on       { color: #fff; box-shadow: inset 0 -3px 0 #7FD1C4; }
+
+.top nav .car {                                    /* panah kecil */
+  width: 6px; height: 6px; margin-top: -3px;
+  border-right: 2px solid currentColor; border-bottom: 2px solid currentColor;
+  transform: rotate(45deg); transition: transform .15s;
+}
+.top nav .dd.buka .car { margin-top: 3px; transform: rotate(225deg); }
+
+.top nav .dd-m {                                   /* panel: fixed, posisinya diisi menu.js */
+  display: none; position: fixed; z-index: 50;
+  min-width: 210px; padding: 6px;
+  background: #fff; border: 1px solid var(--line); border-radius: 10px;
+  box-shadow: 0 10px 28px rgba(18, 49, 43, .18);
+}
+.top nav .dd.buka .dd-m { display: block; }
+
+.top nav .dd-m a {
+  display: flex; align-items: center; min-height: 40px; padding: 0 12px;
+  color: var(--ink); background: none; border-radius: 6px; box-shadow: none;
+}
+.top nav .dd-m a:hover,
+.top nav .dd-m a:focus-visible { color: var(--ink); background: #E9F1EF; }
+.top nav .dd-m a.on            { color: var(--ink); background: #DCEBE7; font-weight: 600; box-shadow: none; }
+
+@media print { .top nav .dd-m { display: none !important; } }

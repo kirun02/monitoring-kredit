@@ -10,18 +10,22 @@ declare(strict_types=1);
 
 // kunci $active di page_head() -> kode menu di m_menu
 const AKTIF_KE_KODE = [
-    'dash'      => 'web_dashboard',
-    'gerak'     => 'web_pergerakan',
-    'prioritas' => 'web_prioritas',
-    'debitur'   => 'web_debitur',
-    'kunjungan' => 'web_kunjungan',
-    'lapkun'    => 'web_lap_kunjungan',
-    'absensi'   => 'web_absensi',
-    'upload'    => 'web_upload',
-    'belum_bayar' => 'web_belum_bayar',
-    'karyawan'  => 'web_karyawan',
-    'pengguna'  => 'web_pengguna',
-    'akses'     => 'web_akses',
+    'dash'          => 'web_dashboard',
+    'gerak'         => 'web_pergerakan',
+    'prioritas'     => 'web_prioritas',
+    'debitur'       => 'web_debitur',
+    'kunjungan'     => 'web_kunjungan',
+    'lapkun'        => 'web_lap_kunjungan',
+    'absensi'       => 'web_absensi',
+    'lap_absensi'   => 'web_lap_absensi',
+    'upload'        => 'web_upload',
+    'belum_bayar'   => 'web_belum_bayar',
+    'karyawan'      => 'web_karyawan',
+    'pengguna'      => 'web_pengguna',
+    'akses'         => 'web_akses',
+    'rencana'       => 'web_rencana',
+    'laprencana'    => 'web_lap_rencana',
+    'progres'   => 'web_progres',
 ];
 
 function akses_kode_aktif(string $active): string
@@ -91,21 +95,43 @@ function akses_pohon(): array
     return $top;
 }
 
-/** Isi <nav> dari menu yang boleh dibuka. Induk dengan anak menautkan ke anak pertama yang boleh dibuka. */
+/**
+ * Isi <nav> dari menu yang boleh dibuka.
+ * Menu tanpa anak = tautan biasa. Induk dengan anak = tombol dropdown (aria-expanded) berisi tautan anak;
+ * buka/tutupnya diatur assets/menu.js. Induk menyala bila salah satu anaknya halaman aktif.
+ */
 function menu_nav_html(string $kodeAktif): string
 {
     $out = '';
+    $no  = 0;
     foreach (akses_pohon() as $t) {
-        $anak = $t['children'];
+        $label = h((string)($t['label'] ?? ''));
+
+        // anak yang punya url aman saja
+        $anak = array_values(array_filter($t['children'], function ($c) {
+            return akses_url_aman((string)($c['url'] ?? '')) !== '';
+        }));
+
         if ($anak) {
-            $href = akses_url_aman((string)($anak[0]['url'] ?? ''));
-            $on   = $kodeAktif === ($t['kode'] ?? '') || in_array($kodeAktif, array_column($anak, 'kode'), true);
-        } else {
-            $href = akses_url_aman((string)($t['url'] ?? ''));
-            $on   = $kodeAktif === ($t['kode'] ?? '');
+            $on = $kodeAktif === ($t['kode'] ?? '') || in_array($kodeAktif, array_column($anak, 'kode'), true);
+            $id = 'ddm' . (++$no);
+            $out .= '<div class="dd">'
+                  . '<button type="button" class="dd-t' . ($on ? ' on' : '') . '" aria-expanded="false" aria-controls="' . $id . '">'
+                  . $label . '<span class="car" aria-hidden="true"></span></button>'
+                  . '<div class="dd-m" id="' . $id . '">';
+            foreach ($anak as $c) {
+                $aktif = $kodeAktif === ($c['kode'] ?? '');
+                $out .= '<a href="' . h(akses_url_aman((string)$c['url'])) . '"'
+                      . ($aktif ? ' class="on" aria-current="page"' : '') . '>' . h((string)($c['label'] ?? '')) . '</a>';
+            }
+            $out .= '</div></div>';
+            continue;
         }
-        if ($href === '') continue;
-        $out .= '<a href="' . h($href) . '" class="' . ($on ? 'on' : '') . '">' . h((string)($t['label'] ?? '')) . '</a>';
+
+        $href = akses_url_aman((string)($t['url'] ?? ''));
+        if ($href === '') continue;                      // induk tanpa anak yang boleh dibuka dan tanpa url: tidak ditampilkan
+        $on = $kodeAktif === ($t['kode'] ?? '');
+        $out .= '<a href="' . h($href) . '" class="' . ($on ? 'on' : '') . '">' . $label . '</a>';
     }
     return $out;
 }
