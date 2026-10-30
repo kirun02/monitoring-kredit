@@ -3,7 +3,7 @@
 require __DIR__ . '/lib.php';
 if (($_GET['data'] ?? '') === '1') {
     require_once __DIR__ . '/api/api_client.php';
-    api_proxy('prioritas', ['tgl', 'ao', 'min']);
+    api_proxy('prioritas', ['tgl', 'ao', 'min', 'xmin']);
 }
 page_head('Prioritas tagih', 'prioritas');
 ?>
@@ -19,11 +19,22 @@ page_head('Prioritas tagih', 'prioritas');
     <label class="f">Tanggal posisi<select id="fTgl"></select></label>
     <label class="f">AO<select id="fAo"></select></label>
     <label class="f">Hari tunggak minimal<select id="fMin">
+            <option value="0">Semua hari</option>
+            <option value="15">15 hari</option>
             <option value="30">30 hari</option>
             <option value="45">45 hari</option>
             <option value="60">60 hari</option>
             <option value="75">75 hari</option>
             <option value="90">90 hari</option>
+        </select></label>
+    <label class="f" id="wXmin">Kali tunggakan minimal<select id="fXmin">
+            <option value="0">Semua</option>
+            <option value="1">≥ 1 kali</option>
+            <option value="2">≥ 2 kali</option>
+            <option value="3">≥ 3 kali</option>
+            <option value="4">≥ 4 kali</option>
+            <option value="5">≥ 5 kali</option>
+            <option value="6">≥ 6 kali</option>
         </select></label>
 </div>
 
@@ -33,8 +44,11 @@ page_head('Prioritas tagih', 'prioritas');
 
 <div class="card">
     <div class="no-print" style="display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;margin-bottom:8px">
-        <a class="btn" id="unduhXlsx" href="#">Unduh Excel</a>
-        <a class="btn" id="unduhPdf" href="#" target="_blank" rel="noopener">Cetak PDF</a>
+        <div class="bg">
+            <a class="bg-btn bg-prev" id="lihatPdf" href="#" target="_blank" rel="noopener" title="Lihat PDF di tab baru"><svg class="ic" aria-hidden="true"><use href="assets/ikon.svg#i-cari"/></svg>Preview</a>
+            <a class="bg-btn bg-xls" id="unduhXlsx" href="#" title="Unduh Excel"><svg class="ic" aria-hidden="true"><use href="assets/ikon.svg#i-xls"/></svg>Excel</a>
+            <a class="bg-btn bg-pdf" id="unduhPdf" href="#" title="Unduh PDF"><svg class="ic" aria-hidden="true"><use href="assets/ikon.svg#i-pdf"/></svg>PDF</a>
+        </div>
     </div>
     <b>Daftar kerja</b> <span class="muted" id="ringkasDaftar"></span>
     <div class="scroll" style="margin-top:8px">
@@ -47,15 +61,18 @@ page_head('Prioritas tagih', 'prioritas');
                     <th>Bakidebet</th>
                     <th>Kolek</th>
                     <th>Hari tunggak</th>
+                    <th>Nunggak (x)</th>
                     <th>Sisa waktu</th>
-                    <th>Tagihan bln ini</th>
+                    <th>Total tunggakan</th>
+                    <th>Kewajiban bln ini</th>
                     <th>Bayar bln ini</th>
+                    <th>Kurang bayar</th>
                     <th>Status bayar</th>
                 </tr>
             </thead>
         </table>
     </div>
-    <div class="muted" style="margin-top:8px">Semua angka dalam Rupiah. "Sisa waktu" dihitung dari batas NPL <span class="batas">…</span> hari. "Lewat batas" berarti hari tunggak sudah di atas batas tapi kolek di data belum berubah. Urutan awal: hari tunggak terbanyak.</div>
+    <div class="muted" style="margin-top:8px">Semua angka dalam Rupiah. Pokok dan bunga ditampilkan terpisah, tidak dijumlahkan. "Total tunggakan" = seluruh tunggakan yang belum dibayar, "Kewajiban bln ini" = yang jatuh tempo bulan ini, "Kurang bayar" = kewajiban bulan ini dikurangi pembayaran bulan ini (merah bila masih kurang), dan "Nunggak (x)" = berapa kali menunggak. Total tunggakan dan Nunggak (x) kosong (–) untuk posisi yang diupload sebelum kolom itu ada. "Sisa waktu" dihitung dari batas NPL <span class="batas">…</span> hari. "Lewat batas" berarti hari tunggak sudah di atas batas tapi kolek di data belum berubah. Urutan awal: hari tunggak terbanyak.</div>
 </div>
 
 <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
@@ -66,7 +83,8 @@ page_head('Prioritas tagih', 'prioritas');
         var F = {
             tgl: document.getElementById('fTgl'),
             ao: document.getElementById('fAo'),
-            min: document.getElementById('fMin')
+            min: document.getElementById('fMin'),
+            xmin: document.getElementById('fXmin')
         };
         var msgBox = document.getElementById('msg'),
             seq = 0;
@@ -85,7 +103,18 @@ page_head('Prioritas tagih', 'prioritas');
 
         function numR(k) {
             return function(d, t, r) {
-                return (t === 'sort' || t === 'type') ? r[k + '_raw'] : esc(d);
+                return (t === 'sort' || t === 'type') ? (r[k + '_raw'] == null ? -1 : r[k + '_raw']) : esc(d);
+            };
+        }
+
+        // sel dua baris: pokok di atas, bunga di bawah (tidak dijumlahkan). Diurutkan menurut jumlah keduanya.
+        function pb(a, b, merah) {
+            return function(d, t, r) {
+                var x = r[a + '_raw'], y = r[b + '_raw'];
+                if (t === 'sort' || t === 'type') return (x == null && y == null) ? -1 : (x || 0) + (y || 0);
+                if (t !== 'display') return r[a] + ' ' + r[b];
+                function w(v, raw) { return (merah && raw > 0) ? '<span class="bad">' + esc(v) + '</span>' : esc(v); }
+                return '<span class="muted">Pokok</span> ' + w(r[a], x) + '<br><span class="muted">Bunga</span> ' + w(r[b], y);
             };
         }
 
@@ -146,18 +175,33 @@ page_head('Prioritas tagih', 'prioritas');
                     }
                 },
                 {
+                    data: 'xnunggak',
+                    render: function(d, t) {
+                        if (t === 'display') return d == null ? '<span class="muted">–</span>' : esc(d);
+                        return d == null ? -1 : d;
+                    }
+                },
+                {
                     data: 'sisa',
                     render: function(d, t, r) {
                         return t === 'display' ? '<span class="' + (r.lewat ? 'bad' : '') + '">' + esc(d) + '</span>' : r.sisa_raw;
                     }
                 },
                 {
-                    data: 'tagihan',
-                    render: numR('tagihan')
+                    data: 'tung_pkk',
+                    render: pb('tung_pkk', 'tung_bg')
                 },
                 {
-                    data: 'bayar',
-                    render: numR('bayar')
+                    data: 'kw_pkk',
+                    render: pb('kw_pkk', 'kw_bg')
+                },
+                {
+                    data: 'byr_pkk',
+                    render: pb('byr_pkk', 'byr_bg')
+                },
+                {
+                    data: 'krg_pkk',
+                    render: pb('krg_pkk', 'krg_bg', true)
                 },
                 {
                     data: 'status',
@@ -174,8 +218,10 @@ page_head('Prioritas tagih', 'prioritas');
             if (sel.tgl) p.set('tgl', sel.tgl);
             if (sel.ao)  p.set('ao', sel.ao);
             if (sel.min) p.set('min', sel.min);
+            if (sel.xmin) p.set('xmin', sel.xmin);
             document.getElementById('unduhXlsx').href = 'api/export.php?' + p.toString() + '&format=xlsx';
-            document.getElementById('unduhPdf').href  = 'api/export.php?' + p.toString() + '&format=pdf';
+            document.getElementById('lihatPdf').href  = 'api/export.php?' + p.toString() + '&format=pdf';
+            document.getElementById('unduhPdf').href  = 'api/export.php?' + p.toString() + '&format=pdf&unduh=1';
         }
 
         function render(d) {
@@ -188,13 +234,17 @@ page_head('Prioritas tagih', 'prioritas');
                 return opt(a.v, a.l, d.sel.ao);
             }).join('');
             F.min.value = d.sel.min;
+            F.xmin.value = d.sel.xmin || '0';
+            document.getElementById('wXmin').style.display = d.x_tersedia === false ? 'none' : '';   // kolom xnunggak belum ada di tabel
 
             document.querySelectorAll('.batas').forEach(function(e) {
                 e.textContent = d.batas;
             });
             var r = d.ringkas;
+            var syarat = (d.sel.min !== '0' ? 'hari tunggak ≥ ' + d.sel.min : 'semua hari tunggak') +
+                (d.sel.xmin && d.sel.xmin !== '0' ? ' dan nunggak ≥ ' + d.sel.xmin + ' kali' : '');
             document.getElementById('ringkasan').innerHTML = '<div class="row">' +
-                '<div class="card kpi"><div class="muted">Potensi tambahan NPL</div><div class="v bad">' + esc(r.potensi) + '</div><div class="n">' + esc(r.n) + ' debitur kolek 1-2 dengan hari tunggak ≥ ' + esc(d.sel.min) + '</div></div>' +
+                '<div class="card kpi"><div class="muted">Potensi tambahan NPL</div><div class="v bad">' + esc(r.potensi) + '</div><div class="n">' + esc(r.n) + ' debitur kolek 1-2 dengan ' + esc(syarat) + '</div></div>' +
                 '<div class="card kpi"><div class="muted">NPL sekarang</div><div class="v">' + esc(r.npl_pct) + '</div><div class="n">' + esc(r.npl) + '</div></div>' +
                 '<div class="card kpi"><div class="muted">NPL kalau semuanya tidak tertagih</div><div class="v bad">' + esc(r.proyeksi_pct) + '</div><div class="n">naik ' + esc(r.selisih) + ' poin dari sekarang</div></div></div>';
 

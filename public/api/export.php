@@ -122,7 +122,9 @@ function export_prioritas(): array
     if (!empty($d['empty'])) export_galat(404, 'Belum ada data posisi. Upload nominatif dulu.');
 
     $rows = [];
-    $sum  = ['bakidebet' => 0.0, 'tagihan' => 0.0, 'bayar' => 0.0];
+    $sum  = ['bakidebet' => 0.0, 'tung_pkk' => 0.0, 'tung_bg' => 0.0, 'kw_pkk' => 0.0, 'kw_bg' => 0.0,
+             'byr_pkk' => 0.0, 'byr_bg' => 0.0, 'krg_pkk' => 0.0, 'krg_bg' => 0.0];      // pokok dan bunga dijumlahkan terpisah
+    $tungAda = !empty($d['tung_tersedia']);
     foreach (($d['rows'] ?? []) as $x) {
         $row = [
             'nama'      => trim((string)($x['nama'] ?? '')),
@@ -134,13 +136,22 @@ function export_prioritas(): array
             'hari'      => $x['hari'] ?? null,
             'sisa'      => (string)($x['sisa'] ?? ''),
             'bakidebet' => (float)($x['bakidebet_raw'] ?? 0),
-            'tagihan'   => (float)($x['tagihan_raw'] ?? 0),
-            'bayar'     => (float)($x['bayar_raw'] ?? 0),
+            'xnunggak'  => $x['xnunggak'] ?? null,
+            'tung_pkk'  => $x['tung_pkk_raw'] ?? null,
+            'tung_bg'   => $x['tung_bg_raw'] ?? null,
+            'kw_pkk'    => (float)($x['kw_pkk_raw'] ?? 0),
+            'kw_bg'     => (float)($x['kw_bg_raw'] ?? 0),
+            'byr_pkk'   => (float)($x['byr_pkk_raw'] ?? 0),
+            'byr_bg'    => (float)($x['byr_bg_raw'] ?? 0),
+            'krg_pkk'   => (float)($x['krg_pkk_raw'] ?? 0),
+            'krg_bg'    => (float)($x['krg_bg_raw'] ?? 0),
             'status'    => (string)($x['status'] ?? ''),
         ];
         foreach ($sum as $k => $_) $sum[$k] += $row[$k];
         $rows[] = $row;
     }
+
+    if (!$tungAda) unset($sum['tung_pkk'], $sum['tung_bg']);          // jangan tampilkan jumlah 0 untuk kolom yang memang belum ada datanya
 
     // backend membatasi daftar kerja 5.000 baris; bila jumlahnya persis segitu, anggap terpotong
     $terpotong = count($rows) >= 5000;
@@ -166,25 +177,33 @@ function export_prioritas(): array
         ],
         'kolom'  => [
             ['h' => 'No',             't' => 'no',    'w' => 5],
-            ['h' => 'Nama debitur',   'k' => 'nama',  'w' => 24],
-            ['h' => 'No. rekening',   'k' => 'norek', 'w' => 14],
+            ['h' => 'Nama debitur',   'k' => 'nama',  'w' => 20],
+            ['h' => 'No. rekening',   'k' => 'norek', 'w' => 13],
             ['h' => 'CIF',            'k' => 'cif',   'w' => 12, 'xlsx' => true],                  // hanya di Excel
-            ['h' => 'Alamat',         'k' => 'alamat','w' => 28],
-            ['h' => 'AO',             'k' => 'ao',    'w' => 16],
+            ['h' => 'Alamat',         'k' => 'alamat','w' => 22],
+            ['h' => 'AO',             'k' => 'ao',    'w' => 12],
             ['h' => 'Kolek',          'k' => 'kolek', 't' => 'int', 'w' => 6],
             ['h' => 'Hari tunggak',   'k' => 'hari',  't' => 'int', 'w' => 8],
             ['h' => 'Sisa waktu',     'k' => 'sisa',  'w' => 12],
-            ['h' => 'Baki debet (Rp)',      'k' => 'bakidebet', 't' => 'rp', 'w' => 15],
-            ['h' => 'Tagihan bln ini (Rp)', 'k' => 'tagihan',   't' => 'rp', 'w' => 15],
-            ['h' => 'Bayar bln ini (Rp)',   'k' => 'bayar',     't' => 'rp', 'w' => 15],
-            ['h' => 'Status bayar',   'k' => 'status','w' => 12],
+            ['h' => 'Nunggak (x)',          'k' => 'xnunggak',  't' => 'int', 'w' => 7],
+            ['h' => 'Baki debet (Rp)',      'k' => 'bakidebet', 't' => 'rp', 'w' => 13],
+            ['h' => 'Total tunggakan pokok (Rp)',   'k' => 'tung_pkk', 't' => 'rp', 'w' => 12],
+            ['h' => 'Total tunggakan bunga (Rp)',   'k' => 'tung_bg',  't' => 'rp', 'w' => 12],
+            ['h' => 'Kewajiban bln ini pokok (Rp)', 'k' => 'kw_pkk',   't' => 'rp', 'w' => 12],
+            ['h' => 'Kewajiban bln ini bunga (Rp)', 'k' => 'kw_bg',    't' => 'rp', 'w' => 12],
+            ['h' => 'Bayar bln ini pokok (Rp)',     'k' => 'byr_pkk',  't' => 'rp', 'w' => 12],
+            ['h' => 'Bayar bln ini bunga (Rp)',     'k' => 'byr_bg',   't' => 'rp', 'w' => 12],
+            ['h' => 'Kurang bayar pokok (Rp)',      'k' => 'krg_pkk',  't' => 'rp', 'w' => 12],
+            ['h' => 'Kurang bayar bunga (Rp)',      'k' => 'krg_bg',   't' => 'rp', 'w' => 12],
+            ['h' => 'Status bayar',   'k' => 'status','w' => 10],
         ],
         'rows'    => $rows,
         'total'   => $terpotong ? null : $sum,
         'catatan' => array_values(array_filter([
+            !$tungAda ? 'Total tunggakan dan jumlah nunggak belum tersedia untuk posisi ini (diupload sebelum kolom ttung_pkk, ttung_bg, xnunggak ada).' : null,
             $terpotong ? 'Daftar dibatasi 5.000 baris pertama. Pilih satu AO untuk melihat seluruhnya. Baris JUMLAH tidak ditampilkan.' : null,
             'Debitur kolek 1-2 dengan hari tunggak minimal ' . $min . ' hari. "Sisa waktu" dihitung dari batas NPL ' . $batas
-                . ' hari; "Lewat batas" berarti hari tunggak sudah di atas batas tetapi kolek di data belum berubah. Urut: hari tunggak terbanyak, lalu baki debet terbesar.',
+                . ' hari; "Lewat batas" berarti hari tunggak sudah di atas batas tetapi kolek di data belum berubah. Pokok dan bunga ditampilkan terpisah; kurang bayar = kewajiban bulan ini dikurangi pembayaran bulan ini (tidak negatif). Urut: hari tunggak terbanyak, lalu baki debet terbesar.',
         ])),
     ];
 }
@@ -330,7 +349,9 @@ function export_rencana_kunjungan(): array
 // ---------------------------------------------------------------------------------------------
 // LAPORAN: progres mingguan (rekening belum bayar di posisi tanggal awal, dilacak tiap minggu)
 // Sumber: jenis_req 'progres' (endpoint Monitoring).
-//   PDF   -> ringkasan per minggu (jenis 'progres').
+//   PDF   -> ringkasan per minggu (jenis 'progres'); dengan &minggu=N -> PDF satu minggu: ringkasan minggu itu,
+//            daftar yang bayar di minggu itu, lalu daftar yang belum bayar sampai akhir minggu itu (jenis 'progres_detail').
+//   PDF + &daftar=1 (+ nama, status, urut) -> daftar debitur kelompok awal, seluruh baris, sama seperti daftar di halaman.
 //   Excel -> rincian per debitur dengan kolom pembayaran tiap minggu (jenis 'progres_detail').
 // ---------------------------------------------------------------------------------------------
 function export_progres(): array
@@ -338,7 +359,23 @@ function export_progres(): array
     $awal  = trim((string)($_GET['awal'] ?? ''));
     $akhir = trim((string)($_GET['akhir'] ?? ''));
     $ao    = trim((string)($_GET['ao'] ?? ''));
+    $dasar = trim((string)($_GET['dasar'] ?? ''));
     $pdf   = (string)($_GET['format'] ?? 'xlsx') === 'pdf';
+    $minggu = (int)($_GET['minggu'] ?? 0);                       // 0 = semua minggu (ringkasan); 1-6 = PDF satu minggu
+    if ($minggu < 0 || $minggu > 6)                             export_galat(422, 'Minggu tidak valid.');
+    $daftar = $pdf && (string)($_GET['daftar'] ?? '') === '1';    // PDF daftar debitur kelompok awal (mengikuti pencarian, status, dan urutan di halaman)
+    $perMinggu = $pdf && $minggu > 0 && !$daftar;
+    $nama   = trim((string)($_GET['nama'] ?? ''));
+    $status = trim((string)($_GET['status'] ?? ''));
+    $urut   = trim((string)($_GET['urut'] ?? ''));
+    $petaStatus = ['belum' => 'Belum bayar', 'sebagian' => 'Sebagian', 'sudah' => 'Sudah bayar', 'tanpa' => 'Tanpa kewajiban bln ini',
+                   'hilang' => 'Kredit lunas', 'tlunas' => 'Tunggakan lunas', 'tturun' => 'Tunggakan turun', 'ttetap' => 'Tunggakan tetap',
+                   'tnaik' => 'Tunggakan naik'];
+    if ($status !== '' && !isset($petaStatus[$status]))                                       export_galat(422, 'Status tidak valid.');
+    if ($nama !== '' && mb_strlen($nama) < 2)                                                  export_galat(422, 'Nama atau nomor rekening minimal 2 karakter.');
+    if (mb_strlen($nama) > 40) $nama = mb_substr($nama, 0, 40);
+    if ($urut !== '' && !in_array($urut, ['hari', 'tgl'], true))                              export_galat(422, 'Urutan tidak valid.');
+    if ($dasar !== '' && !in_array($dasar, ['keduanya', 'kewajiban', 'tunggakan'], true))      export_galat(422, 'Dasar kelompok tidak valid.');
 
     $tglOk = function (string $t): bool { $d = DateTime::createFromFormat('Y-m-d', $t); return $d && $d->format('Y-m-d') === $t; };
     if (($awal === '') !== ($akhir === ''))                     export_galat(422, 'Isi tanggal awal dan tanggal akhir, atau kosongkan keduanya.');
@@ -349,8 +386,14 @@ function export_progres(): array
     $p = [];
     if ($awal !== '') { $p['awal'] = $awal; $p['akhir'] = $akhir; }
     if ($ao !== '')   $p['ao'] = $ao;
+    if ($dasar !== '') $p['dasar'] = $dasar;
+    if ($daftar) {                                   // disaring dan diurutkan di backend, sama seperti daftar di halaman
+        if ($nama !== '')   $p['nama']   = $nama;
+        if ($status !== '') $p['status'] = $status;
+        if ($urut !== '')   $p['urut']   = $urut;
+    }
 
-    $r = api_call($pdf ? 'progres' : 'progres_detail', ['params' => $p], api_cfg()['path_monitoring'], 120);
+    $r = api_call(($pdf && !$perMinggu && !$daftar) ? 'progres' : 'progres_detail', ['params' => $p], api_cfg()['path_monitoring'], 120);
     if (($r['status'] ?? '') !== 'success') export_galat(502, (string)($r['message'] ?? 'Data tidak dapat dimuat dari server.'));
     $d = (array)($r['data'] ?? []);
     if (!empty($d['error'])) export_galat(422, (string)$d['error']);
@@ -359,77 +402,286 @@ function export_progres(): array
     $a     = (array)$d['awal'];
     $mg    = (array)($d['minggu'] ?? []);
     $tgOk  = !empty($d['tung_tersedia']);
+    $dasarPakai = (string)($d['sel']['dasar'] ?? 'kewajiban');
     $fmt   = function ($t): string { $x = strtotime((string)$t); return $x === false ? '–' : date('d/m/Y', $x); };
     $pend  = function ($t): string { $x = strtotime((string)$t); return $x === false ? '–' : date('d/m', $x); };
     $persen = function ($v): string { return $v === null ? '–' : number_format((float)$v, 1, ',', '.') . '%'; };
+    $n0    = function ($v): string { return number_format((float)$v, 0, ',', '.'); };
+    $lblAlasan = ['kewajiban' => 'Belum bayar bln ini', 'tunggakan' => 'Menunggak', 'keduanya' => 'Belum bayar + menunggak'];
+    $lblDasar  = ['keduanya' => 'Kewajiban bulan ini atau tunggakan', 'kewajiban' => 'Kewajiban bulan ini (belum bayar)', 'tunggakan' => 'Total tunggakan'];
+    // status akhir satu debitur, lengkap dengan tanggal lunas
+    $statKw = function (array $x): string {
+        $s = (string)($x['status'] ?? '');
+        if (!empty($x['tgl_lunas'])) $s .= ' (' . date('d/m/Y', strtotime((string)$x['tgl_lunas'])) . ')';
+        elseif (!empty($x['tanpa_kw']) && $s !== 'Kredit lunas') $s .= ' · tanpa kewajiban bln ini';
+        return $s;
+    };
     $namaAo = 'Semua AO';
     if (($d['sel']['ao'] ?? '') !== '') {
         $namaAo = (string)$d['sel']['ao'];
         foreach (($d['aos'] ?? []) as $x) if ((string)($x['v'] ?? '') === $namaAo) { $namaAo = (string)$x['l']; break; }
     }
 
-    $meta = [
+    $metaDasar = [
         'Periode tagihan: ' . (string)$d['periode'] . '   |   Rentang: ' . $fmt($d['sel']['awal']) . ' s/d ' . $fmt($d['sel']['akhir'])
             . '   |   AO: ' . $namaAo . '   |   Kelompok awal dari posisi ' . $fmt($d['posisi_awal']),
-        'Belum bayar di posisi awal: ' . rp_teks($a['rek']) . ' rekening   |   Baki debet: Rp ' . rp_teks($a['baki'])
-            . ($tgOk ? '   |   Tunggakan pokok: Rp ' . rp_teks($a['tung_pkk']) . ', bunga: Rp ' . rp_teks($a['tung_bg']) : '')
-            . '   |   Kewajiban bulan ini: pokok Rp ' . rp_teks($a['kw_pkk']) . ', bunga Rp ' . rp_teks($a['kw_bg']),
+        'Dasar kelompok: ' . ($lblDasar[$dasarPakai] ?? $dasarPakai) . '   |   Rekening di kelompok awal: ' . rp_teks($a['rek'])
+            . ' (belum bayar ' . rp_teks($a['rek_kewajiban']) . ', menunggak ' . rp_teks($a['rek_tunggakan']) . ', keduanya ' . rp_teks($a['rek_keduanya']) . ')'
+            . '   |   Baki debet: Rp ' . rp_teks($a['baki']),
+        ($tgOk ? 'Total tunggakan: pokok Rp ' . rp_teks($a['tung_pkk']) . ', bunga Rp ' . rp_teks($a['tung_bg']) . '   |   ' : '')
+            . 'Kewajiban bulan ini: pokok Rp ' . rp_teks($a['kw_pkk']) . ', bunga Rp ' . rp_teks($a['kw_bg']) . '   (tidak dijumlahkan dengan tunggakan)',
     ];
+    $metaMgg = [];
     if (!$pdf) {                                   // Excel: tabelnya rincian debitur, jadi ringkasan mingguan ditaruh di keterangan
         foreach ($mg as $m) {
-            $meta[] = 'Minggu ' . $m['no'] . ' (' . $pend($m['dari']) . '–' . $pend($m['sampai']) . ', posisi ' . $pend($m['tgl_posisi']) . '): bayar Rp '
-                . rp_teks($m['bayar_total']) . ' (pokok Rp ' . rp_teks($m['bayar_pkk']) . ', bunga Rp ' . rp_teks($m['bayar_bg']) . ')   |   tertagih '
-                . $persen($m['pct_tertagih']) . '   |   sudah bayar ' . rp_teks($m['rek_bayar']) . ' rek, masih belum ' . rp_teks($m['rek_belum'])
-                . ' rek' . ($m['rek_hilang'] ? ', tidak ada di posisi ' . rp_teks($m['rek_hilang']) . ' rek' : '');
+            $metaMgg[] = 'Minggu ' . $m['no'] . ' (' . $pend($m['dari']) . '–' . $pend($m['sampai']) . ', posisi ' . $pend($m['tgl_posisi']) . '): bayar pokok Rp '
+                . rp_teks($m['bayar_pkk']) . ', bunga Rp ' . rp_teks($m['bayar_bg']) . '   |   tertagih pokok ' . $persen($m['pct_pkk']) . ', bunga ' . $persen($m['pct_bg'])
+                . '   |   sudah ada bayar ' . rp_teks($m['rek_bayar']) . ' rek, belum ' . rp_teks($m['rek_belum']) . ' rek'
+                . ($m['rek_hilang'] ? ', kredit lunas ' . rp_teks($m['rek_hilang']) . ' rek' : '');
         }
     }
-    $meta[] = 'Dicetak: ' . date('d/m/Y H:i') . ' oleh ' . (string)((auth_user() ?? [])['nama'] ?? '-');
+    $metaCetak = 'Dicetak: ' . date('d/m/Y H:i') . ' oleh ' . (string)((auth_user() ?? [])['nama'] ?? '-');
+    $susunMeta = function (array $sisip = []) use ($metaDasar, $metaMgg, $metaCetak): array {
+        return array_merge($metaDasar, $sisip, $metaMgg, [$metaCetak]);
+    };
 
     $catatan = array_map('strval', (array)($d['peringatan'] ?? []));
-    $catatan[] = 'Kelompok awal = rekening dengan kewajiban bulan ini tetapi belum ada pembayaran pokok maupun bunga pada posisi tanggal awal. '
-        . 'Pembayaran tiap minggu = selisih pembayaran bulan ini antara dua posisi, hanya untuk rekening kelompok awal. '
-        . '"Tertagih" membandingkan pembayaran dengan kewajiban bulan ini (maksimal sebesar kewajiban tiap rekening).';
+    $catatan[] = 'Kelompok awal menurut dasar yang dipilih: "kewajiban bulan ini" = ada kewajiban bulan ini dan belum ada pembayaran di posisi awal; '
+        . '"total tunggakan" = tunggakan pokok atau bunga di atas nol (termasuk kredit yang sudah jatuh tempo). '
+        . 'Kewajiban bulan ini dan tunggakan TIDAK dijumlahkan karena tanggal posisi dan jadwal angsuran bisa membuat tunggakan sudah atau belum memuat angsuran bulan ini; keduanya ditampilkan sendiri-sendiri, pokok dan bunga terpisah.';
+    $catatan[] = 'Pembayaran tiap minggu = selisih pembayaran bulan ini antara dua posisi. "Tertagih" membandingkan pembayaran dengan kewajiban bulan ini (maksimal sebesar kewajiban tiap rekening). '
+        . 'Kredit lunas = rekening yang ada di posisi awal tetapi tidak lagi ada di nominatif (nominatif hanya memuat debitur yang masih punya baki), dicek per tanggal; '
+        . 'tanggal lunas = tanggal pertama rekening tidak muncul. Pembayaran pelunasan di hari rekening keluar tidak terlihat di angka bayar, dan hapus buku juga terhitung lunas.';
+
+    // ---------------------------- PDF daftar debitur kelompok awal (seperti daftar di halaman, seluruh baris) ----------------------------
+    if ($daftar) {
+        $terpotong = !empty($d['terpotong']);
+        $rows = [];
+        $sum  = ['tung_pkk' => 0.0, 'tung_bg' => 0.0, 'kw_pkk' => 0.0, 'kw_bg' => 0.0, 'tung_pkk_akhir' => 0.0, 'tung_bg_akhir' => 0.0];
+        foreach (($d['rows'] ?? []) as $x) {
+            $row = [
+                'nama' => trim((string)($x['nama'] ?? '')), 'norek' => (string)($x['norek'] ?? ''), 'ao' => (string)($x['ao'] ?? ''),
+                'alasan' => $lblAlasan[$x['alasan'] ?? ''] ?? (string)($x['alasan'] ?? ''),
+                'kolek' => (string)($x['kolek'] ?? '') . (($x['kolek_akhir'] ?? null) === null ? '' : ' → ' . $x['kolek_akhir']),
+                'hari'  => (string)($x['hari'] ?? '')  . (($x['hari_akhir'] ?? null) === null ? '' : ' → ' . $x['hari_akhir']),
+                'xnunggak' => $x['xnunggak'] ?? null, 'tgl_jt' => $x['tgl_jt'] ?? null,
+                'tung_pkk' => $x['tung_pkk'] ?? null, 'tung_bg' => $x['tung_bg'] ?? null,
+                'kw_pkk' => (float)($x['kw_pkk'] ?? 0), 'kw_bg' => (float)($x['kw_bg'] ?? 0),
+                'kurang' => $n0($x['kurang_pkk'] ?? 0) . ' / ' . $n0($x['kurang_bg'] ?? 0),
+                'tung_pkk_akhir' => $x['tung_pkk_akhir'] ?? null, 'tung_bg_akhir' => $x['tung_bg_akhir'] ?? null,
+                'status' => $statKw($x), 'status_tung' => (string)($x['status_tung'] ?? ''),
+            ];
+            foreach ((array)($x['minggu'] ?? []) as $i => $w) {
+                $row['m' . ($i + 1)] = ((float)($w['bayar_pkk'] ?? 0) > 0 || (float)($w['bayar_bg'] ?? 0) > 0)
+                    ? $n0($w['bayar_pkk'] ?? 0) . ' / ' . $n0($w['bayar_bg'] ?? 0) : '–';
+            }
+            foreach ($sum as $k => $_) $sum[$k] += (float)($row[$k] ?? 0);
+            $rows[] = $row;
+        }
+
+        $kolom = [
+            ['h' => 'No',            't' => 'no',   'w' => 4],
+            ['h' => 'Nama debitur',  'k' => 'nama', 'w' => 19],
+            ['h' => 'No. rekening',  'k' => 'norek','w' => 12],
+            ['h' => 'AO',            'k' => 'ao',   'w' => 10],
+            ['h' => 'Alasan masuk',  'k' => 'alasan', 'w' => 10],
+            ['h' => 'Kolek (awal → akhir)',        'k' => 'kolek', 'w' => 6],
+            ['h' => 'Hari tunggak (awal → akhir)', 'k' => 'hari',  'w' => 8],
+            ['h' => 'Nunggak (x)',                 'k' => 'xnunggak', 't' => 'int', 'w' => 5],
+            ['h' => 'Tgl jatuh tempo',             'k' => 'tgl_jt',   't' => 'int', 'w' => 5],
+        ];
+        if ($tgOk) {
+            $kolom[] = ['h' => 'Tunggakan awal pokok (Rp)', 'k' => 'tung_pkk', 't' => 'rp', 'w' => 10];
+            $kolom[] = ['h' => 'Tunggakan awal bunga (Rp)', 'k' => 'tung_bg',  't' => 'rp', 'w' => 10];
+        }
+        $kolom[] = ['h' => 'Kewajiban bln ini pokok (Rp)', 'k' => 'kw_pkk', 't' => 'rp', 'w' => 10];
+        $kolom[] = ['h' => 'Kewajiban bln ini bunga (Rp)', 'k' => 'kw_bg',  't' => 'rp', 'w' => 10];
+        foreach ($mg as $i => $m) {
+            $kolom[] = ['h' => 'Bayar minggu ' . $m['no'] . ' (' . $pend($m['dari']) . '–' . $pend($m['sampai']) . ') pokok / bunga', 'k' => 'm' . ($i + 1), 'w' => 12];
+        }
+        $kolom[] = ['h' => 'Kurang kewajiban pokok / bunga', 'k' => 'kurang', 'w' => 12];
+        if ($tgOk) {
+            $kolom[] = ['h' => 'Sisa tunggakan pokok (Rp)', 'k' => 'tung_pkk_akhir', 't' => 'rp', 'w' => 10];
+            $kolom[] = ['h' => 'Sisa tunggakan bunga (Rp)', 'k' => 'tung_bg_akhir',  't' => 'rp', 'w' => 10];
+        }
+        $kolom[] = ['h' => 'Status kewajiban', 'k' => 'status', 'w' => 11];
+        if ($tgOk) $kolom[] = ['h' => 'Status tunggakan', 'k' => 'status_tung', 'w' => 8];
+        if (!$tgOk) unset($sum['tung_pkk'], $sum['tung_bg'], $sum['tung_pkk_akhir'], $sum['tung_bg_akhir']);
+
+        $ket = ['Urut: ' . ($urut === 'tgl' ? 'tanggal jatuh tempo (1–31)' : 'hari tunggak terbanyak')];
+        if ($nama !== '')   array_unshift($ket, 'Pencarian: ' . $nama);
+        if ($status !== '') array_unshift($ket, 'Status: ' . $petaStatus[$status]);
+        $meta = $susunMeta(['Daftar: ' . rp_teks(count($rows)) . ' debitur   |   ' . implode('   |   ', $ket)]);
+
+        $cat = $catatan;
+        array_unshift($cat, 'Kolom minggu = pembayaran yang masuk pada minggu itu (pokok / bunga). Tanda panah menunjukkan kondisi di posisi awal lalu di posisi terakhir. Tgl jatuh tempo = hanya harinya (1–31) dari tanggal jatuh tempo kredit.');
+        if ($terpotong) array_unshift($cat, 'Rincian dibatasi ' . rp_teks(count((array)($d['rows'] ?? []))) . ' baris pertama dari ' . rp_teks($a['rek']) . ' rekening. Pilih satu AO untuk melihat seluruhnya. Baris JUMLAH tidak ditampilkan.');
+
+        return [
+            'berkas'  => 'progres_daftar_debitur',
+            'judul'   => 'Daftar Debitur Kelompok Awal - Progres Mingguan',
+            'meta'    => $meta,
+            'kolom'   => $kolom,
+            'rows'    => $rows,
+            'total'   => $terpotong ? null : $sum,
+            'catatan' => $cat,
+        ];
+    }
 
     // ---------------------------- PDF: ringkasan per minggu ----------------------------
     if ($pdf) {
         $rows = []; $sP = 0.0; $sB = 0.0;
-        foreach ($mg as $m) {
+        $mgPakai = $mg;
+        if ($perMinggu) {                                      // PDF satu minggu: tabel ringkasan hanya berisi minggu itu
+            $mgPakai = [];
+            foreach ($mg as $m) if ((int)$m['no'] === $minggu) $mgPakai[] = $m;
+            if (!$mgPakai) export_galat(422, 'Minggu ' . $minggu . ' tidak ada pada rentang tanggal ini.');
+        }
+        foreach ($mgPakai as $m) {
             $sP += (float)$m['bayar_pkk']; $sB += (float)$m['bayar_bg'];
             $rows[] = [
                 'mgg' => 'Minggu ' . $m['no'] . ' (' . $pend($m['dari']) . '–' . $pend($m['sampai']) . '), posisi ' . $pend($m['tgl_posisi']),
-                'bayar_pkk' => (float)$m['bayar_pkk'], 'bayar_bg' => (float)$m['bayar_bg'], 'bayar_total' => (float)$m['bayar_total'],
-                'pct' => $persen($m['pct_tertagih']),
+                'bayar_pkk' => (float)$m['bayar_pkk'], 'bayar_bg' => (float)$m['bayar_bg'],
+                'pct_pkk' => $persen($m['pct_pkk']), 'pct_bg' => $persen($m['pct_bg']),
                 'rek_bayar' => $m['rek_bayar'], 'rek_lunas' => $m['rek_lunas'], 'rek_belum' => $m['rek_belum'], 'rek_hilang' => $m['rek_hilang'],
-                'sisa_kw' => (float)$m['sisa_kw'], 'sisa_tung_pkk' => $m['sisa_tung_pkk'], 'sisa_tung_bg' => $m['sisa_tung_bg'],
+                'kurang_pkk' => (float)$m['kurang_pkk'], 'kurang_bg' => (float)$m['kurang_bg'],
+                'sisa_tung_pkk' => $m['sisa_tung_pkk'], 'sisa_tung_bg' => $m['sisa_tung_bg'],
+                'ubah_tung' => $tgOk ? 'Lunas ' . $m['rek_tung_nol'] . ' · Turun ' . $m['rek_tung_turun'] . ' · Tetap ' . $m['rek_tung_tetap'] . ' · Naik ' . $m['rek_tung_naik'] : '',
                 'kolek_memburuk' => $m['kolek_memburuk'], 'masuk_npl' => $m['masuk_npl'],
             ];
         }
         $kolom = [
-            ['h' => 'Minggu',               'k' => 'mgg',            'w' => 22],
-            ['h' => 'Bayar pokok (Rp)',     'k' => 'bayar_pkk',      't' => 'rp',  'w' => 13],
-            ['h' => 'Bayar bunga (Rp)',     'k' => 'bayar_bg',       't' => 'rp',  'w' => 13],
-            ['h' => 'Total bayar (Rp)',     'k' => 'bayar_total',    't' => 'rp',  'w' => 14],
-            ['h' => 'Tertagih',             'k' => 'pct',            'w' => 8],
-            ['h' => 'Sudah bayar (rek)',    'k' => 'rek_bayar',      't' => 'int', 'w' => 8],
-            ['h' => 'Lunas (rek)',          'k' => 'rek_lunas',      't' => 'int', 'w' => 7],
-            ['h' => 'Masih belum (rek)',    'k' => 'rek_belum',      't' => 'int', 'w' => 8],
-            ['h' => 'Tidak ada di posisi',  'k' => 'rek_hilang',     't' => 'int', 'w' => 8],
-            ['h' => 'Sisa kewajiban (Rp)',  'k' => 'sisa_kw',        't' => 'rp',  'w' => 14],
+            ['h' => 'Minggu',                       'k' => 'mgg',        'w' => 20],
+            ['h' => 'Bayar pokok (Rp)',             'k' => 'bayar_pkk',  't' => 'rp',  'w' => 11],
+            ['h' => 'Bayar bunga (Rp)',             'k' => 'bayar_bg',   't' => 'rp',  'w' => 11],
+            ['h' => 'Tertagih pokok',               'k' => 'pct_pkk',    'w' => 7],
+            ['h' => 'Tertagih bunga',               'k' => 'pct_bg',     'w' => 7],
+            ['h' => 'Sudah ada bayar (rek)',        'k' => 'rek_bayar',  't' => 'int', 'w' => 7],
+            ['h' => 'Kewajiban terpenuhi (rek)',    'k' => 'rek_lunas',  't' => 'int', 'w' => 8],
+            ['h' => 'Belum ada bayar (rek)',        'k' => 'rek_belum',  't' => 'int', 'w' => 7],
+            ['h' => 'Kredit lunas (rek)',           'k' => 'rek_hilang', 't' => 'int', 'w' => 7],
+            ['h' => 'Kurang kewajiban pokok (Rp)',  'k' => 'kurang_pkk', 't' => 'rp',  'w' => 11],
+            ['h' => 'Kurang kewajiban bunga (Rp)',  'k' => 'kurang_bg',  't' => 'rp',  'w' => 11],
         ];
         if ($tgOk) {
-            $kolom[] = ['h' => 'Sisa tunggakan pokok (Rp)', 'k' => 'sisa_tung_pkk', 't' => 'rp', 'w' => 14];
-            $kolom[] = ['h' => 'Sisa tunggakan bunga (Rp)', 'k' => 'sisa_tung_bg',  't' => 'rp', 'w' => 14];
+            $kolom[] = ['h' => 'Sisa tunggakan pokok (Rp)', 'k' => 'sisa_tung_pkk', 't' => 'rp', 'w' => 11];
+            $kolom[] = ['h' => 'Sisa tunggakan bunga (Rp)', 'k' => 'sisa_tung_bg',  't' => 'rp', 'w' => 11];
+            $kolom[] = ['h' => 'Perubahan tunggakan (rek)', 'k' => 'ubah_tung', 'w' => 16];
         }
-        $kolom[] = ['h' => 'Kolek memburuk', 'k' => 'kolek_memburuk', 't' => 'int', 'w' => 8];
-        $kolom[] = ['h' => 'Masuk NPL',      'k' => 'masuk_npl',      't' => 'int', 'w' => 7];
+        $kolom[] = ['h' => 'Kolek memburuk', 'k' => 'kolek_memburuk', 't' => 'int', 'w' => 6];
+        $kolom[] = ['h' => 'Masuk NPL',      'k' => 'masuk_npl',      't' => 'int', 'w' => 6];
+
+        if ($perMinggu) {
+            // rincian debitur untuk minggu ini; $x['minggu'][$idx] = ['bayar_pkk','bayar_bg' => masuk minggu ini, 'kum_pkk','kum_bg' => kumulatif, 'ada' => masih ada di nominatif]
+            $idx = $minggu - 1;
+            $mm  = $mgPakai[0];
+            $bayar = []; $belum = []; $lunas = [];
+            $sBy = ['kw_pkk' => 0.0, 'kw_bg' => 0.0, 'bayar_pkk' => 0.0, 'bayar_bg' => 0.0, 'kum_pkk' => 0.0, 'kum_bg' => 0.0];
+            $sBl = ['tung_pkk' => 0.0, 'tung_bg' => 0.0, 'kw_pkk' => 0.0, 'kw_bg' => 0.0];
+            $sLn = ['tung_pkk' => 0.0, 'tung_bg' => 0.0, 'kw_pkk' => 0.0, 'kw_bg' => 0.0];
+            foreach (($d['rows'] ?? []) as $x) {
+                $mx = (array)($x['minggu'] ?? []);
+                $w  = $mx[$idx] ?? null;
+                if (!is_array($w)) continue;
+                $kwP = (float)($x['kw_pkk'] ?? 0); $kwB = (float)($x['kw_bg'] ?? 0);
+                $byP = (float)($w['bayar_pkk'] ?? 0); $byB = (float)($w['bayar_bg'] ?? 0);
+                $kuP = (float)($w['kum_pkk'] ?? 0);   $kuB = (float)($w['kum_bg'] ?? 0);
+                $dasarRow = [
+                    'nama' => trim((string)($x['nama'] ?? '')), 'norek' => (string)($x['norek'] ?? ''), 'ao' => (string)($x['ao'] ?? ''),
+                    'alasan' => $lblAlasan[$x['alasan'] ?? ''] ?? (string)($x['alasan'] ?? ''),
+                    'kolek' => $x['kolek'] ?? null, 'hari' => $x['hari'] ?? null, 'tgl_jt' => $x['tgl_jt'] ?? null,
+                    'tung_pkk' => $x['tung_pkk'] ?? null, 'tung_bg' => $x['tung_bg'] ?? null, 'kw_pkk' => $kwP, 'kw_bg' => $kwB,
+                ];
+                if (empty($w['ada'])) {                         // tidak ada di nominatif minggu ini
+                    $sebelumnya = $idx > 0 ? ($mx[$idx - 1] ?? null) : ['ada' => true];
+                    if (is_array($sebelumnya) && !empty($sebelumnya['ada'])) {      // baru keluar di minggu ini = lunas di minggu ini
+                        $lunas[] = $dasarRow + ['tgl_lunas' => !empty($x['tgl_lunas']) ? $fmt($x['tgl_lunas']) : '–'];
+                        $sLn['tung_pkk'] += (float)($x['tung_pkk'] ?? 0); $sLn['tung_bg'] += (float)($x['tung_bg'] ?? 0);
+                        $sLn['kw_pkk'] += $kwP; $sLn['kw_bg'] += $kwB;
+                    }
+                    continue;
+                }
+                if ($byP > 0 || $byB > 0) {                     // ada pembayaran masuk di minggu ini
+                    $st = ($kwP + $kwB <= 0) ? 'Ada pembayaran (tanpa kewajiban bln ini)'
+                        : ((max(0.0, $kwP - $kuP) <= 0.5 && max(0.0, $kwB - $kuB) <= 0.5) ? 'Kewajiban terpenuhi' : 'Sebagian');
+                    $bayar[] = $dasarRow + ['bayar_pkk' => $byP, 'bayar_bg' => $byB, 'kum_pkk' => $kuP, 'kum_bg' => $kuB, 'status' => $st];
+                    $sBy['kw_pkk'] += $kwP; $sBy['kw_bg'] += $kwB; $sBy['bayar_pkk'] += $byP; $sBy['bayar_bg'] += $byB;
+                    $sBy['kum_pkk'] += $kuP; $sBy['kum_bg'] += $kuB;
+                } elseif ($kuP + $kuB <= 0) {                   // masih ada di nominatif, tetapi sampai akhir minggu ini belum bayar sama sekali
+                    $belum[] = $dasarRow;
+                    $sBl['tung_pkk'] += (float)($x['tung_pkk'] ?? 0); $sBl['tung_bg'] += (float)($x['tung_bg'] ?? 0);
+                    $sBl['kw_pkk'] += $kwP; $sBl['kw_bg'] += $kwB;
+                }
+            }
+
+            $kolId = [
+                ['h' => 'No',            't' => 'no',   'w' => 4],
+                ['h' => 'Nama debitur',  'k' => 'nama', 'w' => 20],
+                ['h' => 'No. rekening',  'k' => 'norek','w' => 12],
+                ['h' => 'AO',            'k' => 'ao',   'w' => 12],
+                ['h' => 'Alasan masuk',  'k' => 'alasan', 'w' => 11],
+                ['h' => 'Kolek awal',    'k' => 'kolek','t' => 'int', 'w' => 5],
+                ['h' => 'Hari tunggak awal', 'k' => 'hari', 't' => 'int', 'w' => 7],
+                ['h' => 'Tgl jatuh tempo',   'k' => 'tgl_jt', 't' => 'int', 'w' => 5],
+            ];
+            $kolTung = $tgOk ? [
+                ['h' => 'Tunggakan awal pokok (Rp)', 'k' => 'tung_pkk', 't' => 'rp', 'w' => 11],
+                ['h' => 'Tunggakan awal bunga (Rp)', 'k' => 'tung_bg',  't' => 'rp', 'w' => 11],
+            ] : [];
+            $kolKw = [
+                ['h' => 'Kewajiban bln ini pokok (Rp)', 'k' => 'kw_pkk', 't' => 'rp', 'w' => 11],
+                ['h' => 'Kewajiban bln ini bunga (Rp)', 'k' => 'kw_bg',  't' => 'rp', 'w' => 11],
+            ];
+            $kolBayar = array_merge($kolId, $kolTung, $kolKw, [
+                ['h' => 'Bayar minggu ini pokok (Rp)',      'k' => 'bayar_pkk', 't' => 'rp', 'w' => 11],
+                ['h' => 'Bayar minggu ini bunga (Rp)',      'k' => 'bayar_bg',  't' => 'rp', 'w' => 11],
+                ['h' => 'Total bayar s/d minggu ini pokok (Rp)', 'k' => 'kum_pkk', 't' => 'rp', 'w' => 12],
+                ['h' => 'Total bayar s/d minggu ini bunga (Rp)', 'k' => 'kum_bg',  't' => 'rp', 'w' => 12],
+                ['h' => 'Status',                            'k' => 'status', 'w' => 12],
+            ]);
+            $kolBelum = array_merge($kolId, $kolTung, $kolKw);
+            $kolLunas = array_merge($kolId, [['h' => 'Tanggal lunas', 'k' => 'tgl_lunas', 'w' => 9]], $kolTung, $kolKw);
+            if (!$tgOk) {
+                unset($sBl['tung_pkk'], $sBl['tung_bg'], $sLn['tung_pkk'], $sLn['tung_bg']);
+            }
+
+            $rentang = $pend($mm['dari']) . '–' . $pend($mm['sampai']);
+            $catMgg  = [];
+            if (!empty($d['terpotong'])) $catMgg[] = 'Rincian debitur dibatasi ' . rp_teks(count((array)($d['rows'] ?? []))) . ' rekening pertama dari ' . rp_teks($a['rek']) . '. Pilih satu AO agar daftar lengkap; baris JUMLAH pada daftar tidak mencakup rekening yang terpotong.';
+            $catMgg[] = 'Yang bayar = rekening kelompok awal yang ada pembayaran masuk pada minggu ini (selisih pembayaran bulan ini dibanding posisi sebelumnya). '
+                . 'Belum bayar = rekening yang masih ada di nominatif tetapi sampai akhir minggu ini belum ada pembayaran pokok maupun bunga (termasuk yang tanpa kewajiban bulan ini, misalnya kredit jatuh tempo). '
+                . 'Kredit lunas = rekening yang keluar dari nominatif pada minggu ini. '
+                . 'Rekening yang sudah membayar pada minggu sebelumnya dan tidak ada pembayaran baru minggu ini tidak masuk daftar bayar maupun belum bayar.';
+
+            $meta = $susunMeta(['Minggu ' . $minggu . ' (' . $rentang . ', posisi ' . $fmt($mm['tgl_posisi']) . ')   |   Yang bayar: ' . rp_teks(count($bayar))
+                . ' rekening   |   Belum bayar: ' . rp_teks(count($belum)) . ' rekening   |   Kredit lunas minggu ini: ' . rp_teks(count($lunas)) . ' rekening']);
+
+            return [
+                'berkas'  => 'progres_minggu_' . $minggu,
+                'judul'   => 'Progres Mingguan Tunggakan dan Gagal Bayar - Minggu ' . $minggu . ' (' . $rentang . ')',
+                'meta'    => $meta,
+                'kolom'   => $kolom,
+                'rows'    => array_merge($bayar, $belum, $lunas),      // hanya untuk pemeriksaan batas baris PDF; tabelnya diambil dari 'bagian'
+                'bagian'  => [
+                    ['judul' => '1. Ringkasan minggu ' . $minggu, 'kolom' => $kolom, 'rows' => $rows, 'total' => null],
+                    ['judul' => '2. Rincian yang bayar di minggu ' . $minggu . ' (' . count($bayar) . ' rekening)',
+                        'kolom' => $kolBayar, 'rows' => $bayar, 'total' => $sBy, 'kosong' => 'Tidak ada rekening yang membayar pada minggu ini.'],
+                    ['judul' => '3. Rincian yang belum bayar sampai akhir minggu ' . $minggu . ' (' . count($belum) . ' rekening)',
+                        'kolom' => $kolBelum, 'rows' => $belum, 'total' => $sBl, 'kosong' => 'Semua rekening yang masih ada di nominatif sudah ada pembayaran.'],
+                    ['judul' => '4. Kredit lunas di minggu ' . $minggu . ' (keluar dari nominatif, ' . count($lunas) . ' rekening)',
+                        'kolom' => $kolLunas, 'rows' => $lunas, 'total' => $sLn, 'kosong' => 'Tidak ada kredit yang lunas pada minggu ini.'],
+                ],
+                'catatan' => array_merge($catMgg, $catatan),
+            ];
+        }
 
         return [
             'berkas'  => 'progres_mingguan',
             'judul'   => 'Progres Mingguan Tunggakan dan Gagal Bayar',
-            'meta'    => $meta,
+            'meta'    => $susunMeta(),
             'kolom'   => $kolom,
             'rows'    => $rows,
-            'total'   => ['bayar_pkk' => $sP, 'bayar_bg' => $sB, 'bayar_total' => $sP + $sB],
+            'total'   => ['bayar_pkk' => $sP, 'bayar_bg' => $sB],
             'catatan' => $catatan,
         ];
     }
@@ -437,21 +689,29 @@ function export_progres(): array
     // ---------------------------- Excel: rincian per debitur ----------------------------
     $terpotong = !empty($d['terpotong']);
     $rows = [];
-    $sum  = ['tung_pkk' => 0.0, 'tung_bg' => 0.0, 'kw_pkk' => 0.0, 'kw_bg' => 0.0, 'bayar_total' => 0.0, 'tung_pkk_akhir' => 0.0, 'tung_bg_akhir' => 0.0];
-    foreach ($mg as $i => $_) $sum['m' . ($i + 1)] = 0.0;
+    $sum  = ['tung_pkk' => 0.0, 'tung_bg' => 0.0, 'kw_pkk' => 0.0, 'kw_bg' => 0.0, 'bayar_pkk' => 0.0, 'bayar_bg' => 0.0,
+             'tung_pkk_akhir' => 0.0, 'tung_bg_akhir' => 0.0, 'kurang_pkk' => 0.0, 'kurang_bg' => 0.0];
+    foreach ($mg as $i => $_) { $sum['mp' . ($i + 1)] = 0.0; $sum['mb' . ($i + 1)] = 0.0; }
 
     foreach (($d['rows'] ?? []) as $x) {
         $row = [
             'nama' => trim((string)($x['nama'] ?? '')), 'norek' => (string)($x['norek'] ?? ''), 'cif' => (string)($x['cif'] ?? ''),
-            'ao' => (string)($x['ao'] ?? ''), 'kolek' => $x['kolek'] ?? null, 'hari' => $x['hari'] ?? null,
+            'ao' => (string)($x['ao'] ?? ''), 'alasan' => $lblAlasan[$x['alasan'] ?? ''] ?? (string)($x['alasan'] ?? ''),
+            'kolek' => $x['kolek'] ?? null, 'hari' => $x['hari'] ?? null, 'xnunggak' => $x['xnunggak'] ?? null,
+            'tempo' => !empty($x['tempo']) ? $fmt($x['tempo']) : '', 'tgl_jt' => $x['tgl_jt'] ?? null,
             'tung_pkk' => $x['tung_pkk'] ?? null, 'tung_bg' => $x['tung_bg'] ?? null,
             'kw_pkk' => (float)($x['kw_pkk'] ?? 0), 'kw_bg' => (float)($x['kw_bg'] ?? 0),
-            'bayar_total' => (float)($x['bayar_total'] ?? 0),
+            'bayar_pkk' => (float)($x['bayar_pkk'] ?? 0), 'bayar_bg' => (float)($x['bayar_bg'] ?? 0),
             'kolek_akhir' => $x['kolek_akhir'] ?? null, 'hari_akhir' => $x['hari_akhir'] ?? null,
             'tung_pkk_akhir' => $x['tung_pkk_akhir'] ?? null, 'tung_bg_akhir' => $x['tung_bg_akhir'] ?? null,
-            'status' => (string)($x['status'] ?? ''),
+            'kurang_pkk' => (float)($x['kurang_pkk'] ?? 0), 'kurang_bg' => (float)($x['kurang_bg'] ?? 0),
+            'status' => $statKw($x), 'status_tung' => (string)($x['status_tung'] ?? ''),
+            'tgl_lunas' => !empty($x['tgl_lunas']) ? $fmt($x['tgl_lunas']) : '',
         ];
-        foreach ((array)($x['minggu'] ?? []) as $i => $w) $row['m' . ($i + 1)] = (float)($w['bayar'] ?? 0);
+        foreach ((array)($x['minggu'] ?? []) as $i => $w) {
+            $row['mp' . ($i + 1)] = (float)($w['bayar_pkk'] ?? 0);
+            $row['mb' . ($i + 1)] = (float)($w['bayar_bg'] ?? 0);
+        }
         foreach ($sum as $k => $_) $sum[$k] += (float)($row[$k] ?? 0);
         $rows[] = $row;
     }
@@ -462,26 +722,37 @@ function export_progres(): array
         ['h' => 'No. rekening',  'k' => 'norek','w' => 14],
         ['h' => 'CIF',           'k' => 'cif',  'w' => 12],
         ['h' => 'AO',            'k' => 'ao',   'w' => 16],
+        ['h' => 'Alasan masuk',  'k' => 'alasan', 'w' => 22],
         ['h' => 'Kolek awal',    'k' => 'kolek','t' => 'int', 'w' => 7],
         ['h' => 'Hari tunggak awal', 'k' => 'hari', 't' => 'int', 'w' => 9],
+        ['h' => 'Nunggak (x)',   'k' => 'xnunggak', 't' => 'int', 'w' => 8],
+        ['h' => 'Tanggal jatuh tempo', 'k' => 'tempo', 'w' => 13],
+        ['h' => 'Hari jatuh tempo (1-31)', 'k' => 'tgl_jt', 't' => 'int', 'w' => 10],
     ];
     if ($tgOk) {
-        $kolom[] = ['h' => 'Tunggakan pokok (Rp)', 'k' => 'tung_pkk', 't' => 'rp', 'w' => 15];
-        $kolom[] = ['h' => 'Tunggakan bunga (Rp)', 'k' => 'tung_bg',  't' => 'rp', 'w' => 15];
+        $kolom[] = ['h' => 'Tunggakan awal pokok (Rp)', 'k' => 'tung_pkk', 't' => 'rp', 'w' => 15];
+        $kolom[] = ['h' => 'Tunggakan awal bunga (Rp)', 'k' => 'tung_bg',  't' => 'rp', 'w' => 15];
     }
     $kolom[] = ['h' => 'Kewajiban bulan ini pokok (Rp)', 'k' => 'kw_pkk', 't' => 'rp', 'w' => 16];
     $kolom[] = ['h' => 'Kewajiban bulan ini bunga (Rp)', 'k' => 'kw_bg',  't' => 'rp', 'w' => 16];
     foreach ($mg as $i => $m) {
-        $kolom[] = ['h' => 'Bayar minggu ' . $m['no'] . ' (' . $pend($m['dari']) . '–' . $pend($m['sampai']) . ') (Rp)', 'k' => 'm' . ($i + 1), 't' => 'rp', 'w' => 15];
+        $ket = $m['no'] . ' (' . $pend($m['dari']) . '–' . $pend($m['sampai']) . ')';
+        $kolom[] = ['h' => 'Bayar minggu ' . $ket . ' pokok (Rp)', 'k' => 'mp' . ($i + 1), 't' => 'rp', 'w' => 15];
+        $kolom[] = ['h' => 'Bayar minggu ' . $ket . ' bunga (Rp)', 'k' => 'mb' . ($i + 1), 't' => 'rp', 'w' => 15];
     }
-    $kolom[] = ['h' => 'Total bayar (Rp)', 'k' => 'bayar_total', 't' => 'rp', 'w' => 15];
+    $kolom[] = ['h' => 'Total bayar pokok (Rp)', 'k' => 'bayar_pkk', 't' => 'rp', 'w' => 15];
+    $kolom[] = ['h' => 'Total bayar bunga (Rp)', 'k' => 'bayar_bg',  't' => 'rp', 'w' => 15];
     $kolom[] = ['h' => 'Kolek akhir',       'k' => 'kolek_akhir', 't' => 'int', 'w' => 7];
     $kolom[] = ['h' => 'Hari tunggak akhir','k' => 'hari_akhir',  't' => 'int', 'w' => 9];
     if ($tgOk) {
         $kolom[] = ['h' => 'Sisa tunggakan pokok (Rp)', 'k' => 'tung_pkk_akhir', 't' => 'rp', 'w' => 15];
         $kolom[] = ['h' => 'Sisa tunggakan bunga (Rp)', 'k' => 'tung_bg_akhir',  't' => 'rp', 'w' => 15];
     }
-    $kolom[] = ['h' => 'Status akhir', 'k' => 'status', 'w' => 22];
+    $kolom[] = ['h' => 'Kurang kewajiban pokok (Rp)', 'k' => 'kurang_pkk', 't' => 'rp', 'w' => 15];
+    $kolom[] = ['h' => 'Kurang kewajiban bunga (Rp)', 'k' => 'kurang_bg',  't' => 'rp', 'w' => 15];
+    $kolom[] = ['h' => 'Status kewajiban', 'k' => 'status', 'w' => 26];
+    if ($tgOk) $kolom[] = ['h' => 'Status tunggakan', 'k' => 'status_tung', 'w' => 16];
+    $kolom[] = ['h' => 'Tanggal lunas (keluar dari nominatif)', 'k' => 'tgl_lunas', 'w' => 16];
 
     if ($terpotong) {
         array_unshift($catatan, 'Rincian dibatasi ' . rp_teks(count($rows)) . ' baris pertama dari ' . rp_teks($a['rek']) . ' rekening. Pilih satu AO untuk melihat seluruhnya. Baris JUMLAH tidak ditampilkan.');
@@ -491,7 +762,7 @@ function export_progres(): array
     return [
         'berkas'  => 'progres_mingguan_rincian',
         'judul'   => 'Progres Mingguan Tunggakan dan Gagal Bayar (Rincian Debitur)',
-        'meta'    => $meta,
+        'meta'    => $susunMeta(),
         'kolom'   => $kolom,
         'rows'    => $rows,
         'total'   => $terpotong ? null : $sum,

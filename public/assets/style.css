@@ -36,3 +36,27 @@ th:first-child,td:first-child{text-align:left}
 .badge{display:inline-block;padding:4px 10px;border-radius:12px;background:var(--ink);color:#fff;font-size:12px;font-weight:500}
 a:focus-visible,button:focus-visible,select:focus-visible,input:focus-visible{outline:3px solid #7FD1C4;outline-offset:2px}
 @media(max-width:640px){main{padding:20px 16px}.top{padding:0 16px}}
+
+/* Grup tombol berwarna: Preview (biru), Excel (hijau), PDF (merah). Ikon dari assets/ikon.svg */
+.bg { display: inline-flex; vertical-align: middle; }
+.bg-btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 8px 14px; border: 0; color: #fff !important;
+    font: inherit; font-weight: 600; line-height: 1.2; white-space: nowrap;
+    text-decoration: none; cursor: pointer;
+    transition: filter .15s ease, transform .05s ease;
+}
+.bg-btn:first-child { border-radius: 8px 0 0 8px; }
+.bg-btn:last-child  { border-radius: 0 8px 8px 0; }
+.bg-btn:only-child  { border-radius: 8px; }
+.bg-btn + .bg-btn   { border-left: 1px solid rgba(255, 255, 255, .25); }
+.bg-btn:hover  { filter: brightness(.92); }
+.bg-btn:active { transform: translateY(1px); }
+.bg-btn:focus-visible { outline: 3px solid rgba(15, 107, 99, .35); outline-offset: 1px; position: relative; z-index: 1; }
+.bg-btn[aria-disabled="true"] { opacity: .45; pointer-events: none; }
+.bg-prev { background: #0d6efd; }
+.bg-xls  { background: #198754; }
+.bg-pdf  { background: #dc3545; }
+.ic { width: 1.05em; height: 1.05em; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.bg-sm .bg-btn { padding: 5px 10px; font-size: .85rem; gap: 5px; }
+@media print { .bg { display: none !important; } }

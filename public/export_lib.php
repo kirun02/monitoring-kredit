@@ -288,43 +288,13 @@ function export_fmt_pdf($v, string $t, int $no): string
     }
 }
 
-function export_pdf(array $spec, ?array $kop, string $nama): void
+/** Satu tabel data untuk PDF (judul kolom, isi, baris JUMLAH). $kol sudah tanpa kolom khusus Excel. */
+function export_pdf_tabel(array $kol, array $baris, ?array $total, string $kosong = 'Tidak ada data untuk filter ini.'): string
 {
-    // kolom khusus Excel tidak ikut ke PDF
-    $kol   = array_values(array_filter($spec['kolom'], function ($c) { return empty($c['xlsx']); }));
-    $baris = $spec['rows'];
     $jumlahW = 0.0;
     foreach ($kol as $c) $jumlahW += (float)($c['w'] ?? 14);
 
-    $css = 'body{font-family:dejavusanscondensed;font-size:8pt;color:#14232B}
-        table.kop{width:100%;border-collapse:collapse}
-        td.kl{width:24mm;vertical-align:middle}
-        td.kt{text-align:center;vertical-align:middle}
-        .k1{font-size:14pt;font-weight:bold}
-        .k2{font-size:8pt;color:#4A5961}
-        .kgaris{border-top:1.2mm solid #0F6B63;margin:2mm 0 4mm}
-        h1{font-size:12pt;text-align:center;margin:0 0 1mm}
-        .meta{font-size:7.5pt;color:#4A5961;text-align:center}
-        table.data{width:100%;border-collapse:collapse;margin-top:4mm}
-        table.data th{background-color:#0F6B63;color:#FFFFFF;font-weight:bold;border:0.2mm solid #B9C5C8;padding:1.2mm}
-        table.data td{border:0.2mm solid #B9C5C8;padding:1mm 1.2mm;vertical-align:top}
-        .num{text-align:right} .ctr{text-align:center}
-        tr.jml td{font-weight:bold;background-color:#E7EFEE}
-        .cat{font-size:7pt;font-style:italic;color:#4A5961;margin-top:2mm}';
-
-    $b = '';
-    if ($kop) {
-        $logo = export_logo($kop);
-        $b .= '<table class="kop"><tr>';
-        $b .= '<td class="kl">' . ($logo ? '<img src="' . $logo['uri'] . '" style="height:16mm">' : '') . '</td>';
-        $b .= '<td class="kt"><div class="k1">' . h_e($kop['nama']) . '</div>';
-        foreach (array_slice((array)($kop['baris'] ?? []), 0, 3) as $t) $b .= '<div class="k2">' . h_e($t) . '</div>';
-        $b .= '</td><td class="kl"></td></tr></table><div class="kgaris"></div>';
-    }
-    $b .= '<h1>' . h_e($spec['judul']) . '</h1>';
-    foreach (($spec['meta'] ?? []) as $m) $b .= '<div class="meta">' . h_e($m) . '</div>';
-
-    $b .= '<table class="data"><thead><tr>';
+    $b = '<table class="data"><thead><tr>';
     foreach ($kol as $c) {
         $w = round(100 * (float)($c['w'] ?? 14) / max(1.0, $jumlahW), 2);
         $b .= '<th style="width:' . $w . '%">' . h_e($c['h']) . '</th>';
@@ -342,23 +312,69 @@ function export_pdf(array $spec, ?array $kop, string $nama): void
         }
         $b .= '</tr>';
     }
-    if (!$baris) $b .= '<tr><td colspan="' . count($kol) . '" class="ctr">Tidak ada data untuk filter ini.</td></tr>';
+    if (!$baris) $b .= '<tr><td colspan="' . count($kol) . '" class="ctr">' . h_e($kosong) . '</td></tr>';
 
-    if (!empty($spec['total']) && $baris) {
+    if (!empty($total) && $baris) {
         $first = null;
         foreach ($kol as $i => $c) {
-            if (($c['k'] ?? '') !== '' && array_key_exists($c['k'], $spec['total'])) { $first = $i; break; }
+            if (($c['k'] ?? '') !== '' && array_key_exists($c['k'], $total)) { $first = $i; break; }
         }
         if ($first !== null) {
             $b .= '<tr class="jml"><td colspan="' . max(1, $first) . '" class="num">JUMLAH</td>';
             for ($i = max(1, $first); $i < count($kol); $i++) {
                 $k = $kol[$i]['k'] ?? '';
-                $b .= '<td class="num">' . ($k !== '' && array_key_exists($k, $spec['total']) ? number_format((float)$spec['total'][$k], 0, ',', '.') : '') . '</td>';
+                $b .= '<td class="num">' . ($k !== '' && array_key_exists($k, $total) ? number_format((float)$total[$k], 0, ',', '.') : '') . '</td>';
             }
             $b .= '</tr>';
         }
     }
-    $b .= '</tbody></table>';
+    return $b . '</tbody></table>';
+}
+
+function export_pdf(array $spec, ?array $kop, string $nama): void
+{
+    // kolom khusus Excel tidak ikut ke PDF
+    $tanpaXlsx = function (array $kolom) { return array_values(array_filter($kolom, function ($c) { return empty($c['xlsx']); })); };
+    // 'bagian' (opsional): beberapa tabel berurutan dalam satu PDF, tiap bagian = ['judul', 'kolom', 'rows', 'total']
+    $bagian = (!empty($spec['bagian']) && is_array($spec['bagian'])) ? $spec['bagian'] : null;
+
+    $css = 'body{font-family:dejavusanscondensed;font-size:8pt;color:#14232B}
+        table.kop{width:100%;border-collapse:collapse}
+        td.kl{width:24mm;vertical-align:middle}
+        td.kt{text-align:center;vertical-align:middle}
+        .k1{font-size:14pt;font-weight:bold}
+        .k2{font-size:8pt;color:#4A5961}
+        .kgaris{border-top:1.2mm solid #0F6B63;margin:2mm 0 4mm}
+        h1{font-size:12pt;text-align:center;margin:0 0 1mm}
+        .meta{font-size:7.5pt;color:#4A5961;text-align:center}
+        table.data{width:100%;border-collapse:collapse;margin-top:4mm}
+        table.data th{background-color:#0F6B63;color:#FFFFFF;font-weight:bold;border:0.2mm solid #B9C5C8;padding:1.2mm}
+        table.data td{border:0.2mm solid #B9C5C8;padding:1mm 1.2mm;vertical-align:top}
+        .num{text-align:right} .ctr{text-align:center}
+        tr.jml td{font-weight:bold;background-color:#E7EFEE}
+        h2{font-size:10pt;color:#0F6B63;margin:6mm 0 0}
+        .cat{font-size:7pt;font-style:italic;color:#4A5961;margin-top:2mm}';
+
+    $b = '';
+    if ($kop) {
+        $logo = export_logo($kop);
+        $b .= '<table class="kop"><tr>';
+        $b .= '<td class="kl">' . ($logo ? '<img src="' . $logo['uri'] . '" style="height:16mm">' : '') . '</td>';
+        $b .= '<td class="kt"><div class="k1">' . h_e($kop['nama']) . '</div>';
+        foreach (array_slice((array)($kop['baris'] ?? []), 0, 3) as $t) $b .= '<div class="k2">' . h_e($t) . '</div>';
+        $b .= '</td><td class="kl"></td></tr></table><div class="kgaris"></div>';
+    }
+    $b .= '<h1>' . h_e($spec['judul']) . '</h1>';
+    foreach (($spec['meta'] ?? []) as $m) $b .= '<div class="meta">' . h_e($m) . '</div>';
+
+    if ($bagian) {
+        foreach ($bagian as $bg) {
+            $b .= '<h2>' . h_e($bg['judul'] ?? '') . '</h2>';
+            $b .= export_pdf_tabel($tanpaXlsx((array)$bg['kolom']), (array)($bg['rows'] ?? []), $bg['total'] ?? null, (string)($bg['kosong'] ?? 'Tidak ada data.'));
+        }
+    } else {
+        $b .= export_pdf_tabel($tanpaXlsx((array)$spec['kolom']), (array)$spec['rows'], $spec['total'] ?? null);
+    }
     foreach (($spec['catatan'] ?? []) as $cat) $b .= '<div class="cat">' . h_e($cat) . '</div>';
 
     $tmp = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'mpdf';
