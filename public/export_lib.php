@@ -18,6 +18,8 @@ declare(strict_types=1);
  *   'rows'    => [ ['nama' => '...', ...], ... ],
  *   'total'   => ['baki' => 123, ...] | null,      // baris JUMLAH, kunci = 'k' kolom
  *   'catatan' => ['...'],                          // baris catatan di bawah tabel
+ *   'ringkasan' => ['judul' => '', 'sub' => '', 'kolom' => ['Uraian', ...], 'baris' => [[...], ...], 'catatan' => ''],
+ *                 // opsional: lembar "Ringkasan" di Excel, halaman terakhir di PDF
  * ]
  */
 
@@ -105,6 +107,67 @@ function export_isi($ws, string $coord, $v, string $t): void
         default:
             $ws->setCellValueExplicit($coord, (string)$v, DataType::TYPE_STRING);
     }
+}
+
+/**
+ * Lembar kedua "Ringkasan" (opsional, dari $spec['ringkasan']):
+ *   ['judul' => '', 'sub' => '', 'kolom' => ['Uraian', 'Debitur', 'Pokok (Rp)', ...], 'baris' => [[teks, jumlah, rp, rp, ...], ...], 'catatan' => '']
+ * Kolom pertama teks, kolom kedua bilangan bulat, sisanya Rupiah; null tampil sebagai "–".
+ */
+function export_xlsx_ringkasan(Spreadsheet $ss, array $rg): void
+{
+    $ws  = $ss->createSheet();                       // lembar aktif tetap "Laporan"
+    $ws->setTitle('Ringkasan');
+    $kol = array_values((array)($rg['kolom'] ?? []));
+    $n   = max(1, count($kol));
+    $ak  = Coordinate::stringFromColumnIndex($n);
+
+    $ws->setCellValueExplicit('A1', (string)($rg['judul'] ?? 'Ringkasan'), DataType::TYPE_STRING);
+    $ws->getStyle('A1')->getFont()->setBold(true)->setSize(13);
+    $ws->setCellValueExplicit('A2', (string)($rg['sub'] ?? ''), DataType::TYPE_STRING);
+    $ws->getStyle('A2')->getFont()->setItalic(true)->getColor()->setRGB('4A5961');
+
+    $hdr = 4;
+    foreach ($kol as $i => $h) {
+        $ws->setCellValueExplicit(Coordinate::stringFromColumnIndex($i + 1) . $hdr, (string)$h, DataType::TYPE_STRING);
+    }
+    $sh = $ws->getStyle("A$hdr:$ak$hdr");
+    $sh->getFont()->setBold(true)->getColor()->setRGB('FFFFFF');
+    $sh->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('0F6B63');
+    $sh->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER)->setVertical(Alignment::VERTICAL_CENTER)->setWrapText(true);
+
+    $tipe = ['text', 'int', 'rp', 'rp', 'rp'];
+    $r = $hdr;
+    foreach ((array)($rg['baris'] ?? []) as $b) {
+        $r++;
+        foreach (array_values((array)$b) as $i => $v) {
+            if ($i >= $n) break;
+            $coord = Coordinate::stringFromColumnIndex($i + 1) . $r;
+            if ($i > 0 && $v === null) $ws->setCellValueExplicit($coord, '–', DataType::TYPE_STRING);
+            else export_isi($ws, $coord, $v, $tipe[$i] ?? 'text');
+        }
+    }
+    if ($r > $hdr) {
+        if ($n >= 2) {
+            $st = $ws->getStyle('B' . ($hdr + 1) . ":$ak$r");
+            $st->getNumberFormat()->setFormatCode('#,##0');
+            $st->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
+        }
+        $ws->getStyle("A$hdr:$ak$r")->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN)->getColor()->setRGB('B9C5C8');
+        $ws->getStyle('A' . ($hdr + 1) . ":A$r")->getAlignment()->setWrapText(true)->setVertical(Alignment::VERTICAL_TOP);
+    }
+    if (!empty($rg['catatan'])) {
+        $r += 2;
+        $ws->setCellValueExplicit("A$r", (string)$rg['catatan'], DataType::TYPE_STRING);
+        $ws->mergeCells("A$r:$ak$r");
+        $ws->getStyle("A$r")->getAlignment()->setWrapText(true)->setVertical(Alignment::VERTICAL_TOP);
+        $ws->getStyle("A$r")->getFont()->setItalic(true)->setSize(8);
+        $ws->getRowDimension($r)->setRowHeight(36);
+    }
+    $ws->getColumnDimension('A')->setWidth(62);
+    for ($i = 2; $i <= $n; $i++) $ws->getColumnDimension(Coordinate::stringFromColumnIndex($i))->setWidth(18);
+    $ws->getPageSetup()->setOrientation(PageSetup::ORIENTATION_LANDSCAPE)->setPaperSize(PageSetup::PAPERSIZE_A4)
+        ->setFitToPage(true)->setFitToWidth(1)->setFitToHeight(0);
 }
 
 function export_xlsx(array $spec, ?array $kop, string $nama): void
@@ -262,6 +325,9 @@ function export_xlsx(array $spec, ?array $kop, string $nama): void
     $ws->getPageMargins()->setTop(0.5)->setBottom(0.6)->setLeft(0.4)->setRight(0.4);
     $ws->getHeaderFooter()->setOddFooter('&L&8Monitoring Kredit&C&8Halaman &P dari &N&R&8&D');
 
+    if (!empty($spec['ringkasan'])) export_xlsx_ringkasan($ss, (array)$spec['ringkasan']);
+    $ss->setActiveSheetIndex(0);
+
     while (ob_get_level() > 0) ob_end_clean();
     header('Cache-Control: no-store, max-age=0');
     header('X-Content-Type-Options: nosniff');
@@ -331,6 +397,35 @@ function export_pdf_tabel(array $kol, array $baris, ?array $total, string $koson
     return $b . '</tbody></table>';
 }
 
+/** Halaman ringkasan di PDF (halaman baru, dari $spec['ringkasan']; bentuknya sama dengan untuk Excel). */
+function export_pdf_ringkasan(array $rg): string
+{
+    $kol = array_values((array)($rg['kolom'] ?? []));
+    $b  = '<pagebreak /><h1>' . h_e($rg['judul'] ?? 'Ringkasan') . '</h1><div class="meta">' . h_e($rg['sub'] ?? '') . '</div>';
+    $b .= '<table class="data"><thead><tr>';
+    foreach ($kol as $i => $h) {
+        $b .= '<th style="width:' . ($i === 0 ? '46' : round(54 / max(1, count($kol) - 1), 2)) . '%">' . h_e($h) . '</th>';
+    }
+    $b .= '</tr></thead><tbody>';
+    foreach ((array)($rg['baris'] ?? []) as $row) {
+        $b .= '<tr>';
+        foreach (array_values((array)$row) as $i => $v) {
+            if ($i === 0) {
+                $t = (string)$v;
+                $b .= '<td>' . str_repeat('&nbsp;', strlen($t) - strlen(ltrim($t))) . h_e(ltrim($t)) . '</td>';
+            } elseif ($v === null) {
+                $b .= '<td class="num">–</td>';
+            } else {
+                $b .= '<td class="num">' . number_format((float)$v, 0, ',', '.') . '</td>';
+            }
+        }
+        $b .= '</tr>';
+    }
+    $b .= '</tbody></table>';
+    if (!empty($rg['catatan'])) $b .= '<div class="cat">' . h_e($rg['catatan']) . '</div>';
+    return $b;
+}
+
 function export_pdf(array $spec, ?array $kop, string $nama): void
 {
     @ini_set('display_errors', '0');          // pesan PHP ke log, bukan ke browser
@@ -378,6 +473,7 @@ function export_pdf(array $spec, ?array $kop, string $nama): void
         $b .= export_pdf_tabel($tanpaXlsx((array)$spec['kolom']), (array)$spec['rows'], $spec['total'] ?? null);
     }
     foreach (($spec['catatan'] ?? []) as $cat) $b .= '<div class="cat">' . h_e($cat) . '</div>';
+    if (!empty($spec['ringkasan'])) $b .= export_pdf_ringkasan((array)$spec['ringkasan']);
 
     $tmp = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'mpdf';
     if (!is_dir($tmp)) @mkdir($tmp, 0775, true);
@@ -397,10 +493,6 @@ function export_pdf(array $spec, ?array $kop, string $nama): void
     while (ob_get_level() > 0) ob_end_clean();
     header('Cache-Control: no-store, max-age=0');
     $pdf->Output($nama, 'I');                         // 'I' = tampil di browser (untuk dicetak)
-
-    while (ob_get_level() > 0) ob_end_clean();   // sekarang benar-benar membuang sisa output
-    header('Cache-Control: no-store, max-age=0');
-    $pdf->Output($nama, 'I');
 }
 
 // ---------------------------------------------------------------------------------------------

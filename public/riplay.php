@@ -30,7 +30,6 @@ page_head('RIPLAY Kredit Arthamas', 'kredit_arthamas');
 
 <div>
     <h1>RIPLAY Personal: Kredit Arthamas</h1>
-    <div class="sub">Ringkasan Informasi Produk dan Layanan Kredit Arthamas untuk calon debitur baru. Isi manual, lalu cetak PDF.</div>
 </div>
 
 <form id="fRiplay" method="post" action="api/export_riplay.php?produk=kredit" target="_blank" autocomplete="off">

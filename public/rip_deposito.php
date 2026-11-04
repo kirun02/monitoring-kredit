@@ -8,7 +8,6 @@ page_head('RIPLAY Deposito Artha Mas', 'depo_arthamas');
 
 <div>
     <h1>RIPLAY Personal: Deposito Artha Mas</h1>
-    <div class="sub">Isi manual, lalu cetak PDF. Nomor CIF/rekening dan nomor bilyet boleh dikosongkan bila belum ada.</div>
 </div>
 
 <form id="fDepo" class="rp-form" method="post" action="api/export_riplay.php?produk=deposito" target="_blank" autocomplete="off">

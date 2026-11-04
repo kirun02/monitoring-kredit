@@ -128,10 +128,15 @@ try {
         $nama = trim((string)($_POST['nama'] ?? ''));
         $ket  = trim((string)($_POST['keterangan'] ?? ''));
         $komit = trim((string)($_POST['tgl_komit'] ?? ''));
+        // lokasi WAJIB ada (koordinat lintang, bujur); kualitasnya (akurasi, umur, wilayah) dinilai dan dilabeli di backend, lokasi jelek tetap disimpan
+        $lokasi  = trim((string)($_POST['lokasi'] ?? ''));
+        $akurasi = isset($_POST['lokasi_akurasi']) && is_numeric($_POST['lokasi_akurasi']) ? max(0, min(10000000, (float)$_POST['lokasi_akurasi'])) : null;
+        $umur    = isset($_POST['lokasi_umur']) && is_numeric($_POST['lokasi_umur']) ? max(0, min(604800, (int)$_POST['lokasi_umur'])) : null;
 
         if (!preg_match('/^[0-9A-Za-z]{1,15}$/', $rek)) keluar(['error' => 'Nomor rekening harus berupa huruf atau angka, maksimal 15 karakter.'], 422);
         if ($nama === '')                               keluar(['error' => 'Nama debitur wajib diisi.'], 422);
         if ($ket === '')                                keluar(['error' => 'Keterangan kunjungan wajib diisi.'], 422);
+        if (!preg_match('/^-?\d{1,3}(\.\d+)?\s*,\s*-?\d{1,3}(\.\d+)?$/', $lokasi)) keluar(['error' => 'Lokasi wajib diambil dulu (tombol Ambil Lokasi) sebelum menyimpan kunjungan.'], 422);
         if ($komit !== '' && (!tgl_valid($komit) || $komit < date('Y-m-d'))) keluar(['error' => 'Tanggal komitmen harus tanggal hari ini atau sesudahnya.'], 422);
         if (!isset($_FILES['foto']) || ($_FILES['foto']['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) keluar(['error' => 'Foto kunjungan wajib diisi.'], 422);
 
@@ -149,7 +154,9 @@ try {
             'keterangan' => $ket,
             'id_user'    => $idUser,                       // dari sesi, bukan dari form
             'tgl_komit'  => $komit,
-            'lokasi'     => trim((string)($_POST['lokasi'] ?? '')),
+            'lokasi'     => $lokasi,
+            'lokasi_akurasi' => $akurasi,
+            'lokasi_umur'    => $umur,
         ], $cfg['path_kunjungan']);
 
         if (($r['status'] ?? '') !== 'success') {

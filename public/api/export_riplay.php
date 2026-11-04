@@ -4,7 +4,7 @@
  *
  *   POST api/export_riplay.php?produk=kredit           -> PDF dibuka di tab browser (Preview)
  *   POST api/export_riplay.php?produk=kredit&unduh=1   -> PDF diunduh
- *   produk: kredit | sikemas | deposito | tabungan | qurban | siswa (baru kredit, sikemas, dan deposito yang sudah dibuat)
+ *   produk: kredit | sikemas | deposito | tabungan | qurban | siswa (semua produk sudah dibuat)
  *
  * Isian datang dari riplay.php lewat POST (data pribadi tidak masuk URL/log) dan TIDAK disimpan.
  * Validasi, simulasi, susunan dokumen, dan pembuat PDF ada di ../export_lib_riplay.php.
@@ -26,6 +26,9 @@ if (function_exists('boleh') && !boleh($AKSES[$produk])) export_galat(403, 'Kamu
 $PRODUK = [
     'sikemas'  => ['export_riplay_sikemas.php',  'sikemas',  'RIPLAY Personal – SikEMAS',             'RIPLAY_SikEMAS_'],
     'deposito' => ['export_riplay_deposito.php', 'deposito', 'RIPLAY Personal – Deposito Artha Mas',  'RIPLAY_Deposito_'],
+    'tabungan' => ['export_riplay_tabungan.php', 'tabungan', 'RIPLAY Personal – Tabungan Arthamas',  'RIPLAY_Tabungan_'],
+    'qurban'   => ['export_riplay_qurban.php',   'qurban',   'RIPLAY Personal – Tabungan Pejuang Qurban (TPQ)', 'RIPLAY_TPQ_'],
+    'siswa'    => ['export_riplay_siswa.php', 'siswa',    'RIPLAY Personal – Tabungan Siswa Arthamas',      'RIPLAY_TabunganSiswa_'],
 ];
 if ($produk !== 'kredit' && !isset($PRODUK[$produk])) export_galat(501, 'RIPLAY untuk produk ini belum tersedia.');
 

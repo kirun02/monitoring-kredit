@@ -885,6 +885,194 @@ function export_debitur(): array
 
 
 // ---------------------------------------------------------------------------------------------
+// LAPORAN: ketepatan bayar (tepat waktu / terlambat / sebagian / tidak bayar per bulan, dan pola langganan bermasalah)
+// Sumber: jenis_req 'ketepatan_detail' (endpoint Monitoring). Pokok dan bunga selalu terpisah.
+//   PDF   -> ringkas: satu kolom status per bulan + kurang bayar bulan terakhir.
+//   Excel -> lengkap: status, tanggal terpantau bayar, dan kurang bayar pokok/bunga untuk tiap bulan.
+// ---------------------------------------------------------------------------------------------
+function export_ketepatan(): array
+{
+    $dari   = trim((string)($_GET['dari'] ?? ''));
+    $sampai = trim((string)($_GET['sampai'] ?? ''));
+    $ao     = trim((string)($_GET['ao'] ?? ''));
+    $tol    = (int)($_GET['toleransi'] ?? 0);
+    $pola   = trim((string)($_GET['pola'] ?? ''));
+    $nama   = trim((string)($_GET['nama'] ?? ''));
+    $pdf    = (string)($_GET['format'] ?? 'xlsx') === 'pdf';
+
+    $fmtP = function (string $t): bool { return (bool)preg_match('/^\d{4}-(0[1-9]|1[0-2])$/', $t); };
+    if ($dari !== '' && !$fmtP($dari))                         export_galat(422, 'Bulan awal tidak valid.');
+    if ($sampai !== '' && !$fmtP($sampai))                     export_galat(422, 'Bulan akhir tidak valid.');
+    if ($dari !== '' && $sampai !== '' && $sampai < $dari)     export_galat(422, 'Bulan akhir tidak boleh sebelum bulan awal.');
+    if ($tol < 0 || $tol > 10)                                 export_galat(422, 'Toleransi keterlambatan 0 sampai 10 hari.');
+    if ($ao !== '' && !preg_match('/^[A-Za-z0-9_.\-]{1,20}$/', $ao)) export_galat(422, 'Kode AO tidak valid.');
+    if ($pola !== '' && !in_array($pola, ['tepat', 'selalu', 'campuran', 'satu', 'belum'], true)) export_galat(422, 'Pola tidak valid.');
+    if ($nama !== '' && mb_strlen($nama) < 2)                  export_galat(422, 'Nama atau nomor rekening minimal 2 karakter.');
+    if (mb_strlen($nama) > 40) $nama = mb_substr($nama, 0, 40);
+
+    $p = ['toleransi' => (string)$tol];
+    if ($dari !== '')   $p['dari']   = $dari;
+    if ($sampai !== '') $p['sampai'] = $sampai;
+    if ($ao !== '')     $p['ao']     = $ao;
+    if ($pola !== '')   $p['pola']   = $pola;
+    if ($nama !== '')   $p['nama']   = $nama;
+
+    $r = api_call('ketepatan_detail', ['params' => $p], api_cfg()['path_monitoring'], 120);
+    if (($r['status'] ?? '') !== 'success') export_galat(502, (string)($r['message'] ?? 'Data tidak dapat dimuat dari server.'));
+    $d = (array)($r['data'] ?? []);
+    if (!empty($d['error'])) export_galat(422, (string)$d['error']);
+    if (!empty($d['empty'])) export_galat(404, (string)($d['pesan'] ?? 'Belum ada data.'));
+
+    $bulan  = (array)($d['bulan'] ?? []);
+    $nB     = count($bulan);
+    $fmt    = function ($t): string { $x = strtotime((string)$t); return $x === false ? '–' : date('d/m/Y', $x); };
+    $pend   = function ($t): string { $x = strtotime((string)$t); return $x === false ? '–' : date('d/m', $x); };
+    $labelB = function (string $per): string {
+        $nm = ['01' => 'Jan', '02' => 'Feb', '03' => 'Mar', '04' => 'Apr', '05' => 'Mei', '06' => 'Jun', '07' => 'Jul', '08' => 'Agu', '09' => 'Sep', '10' => 'Okt', '11' => 'Nov', '12' => 'Des'];
+        return ($nm[substr($per, 5, 2)] ?? substr($per, 5, 2)) . ' ' . substr($per, 0, 4);
+    };
+    $persen = function ($v): string { return $v === null ? '–' : number_format((float)$v, 1, ',', '.') . '%'; };
+    $lblPola = ['tepat' => 'Tepat waktu', 'selalu' => 'Selalu bermasalah', 'campuran' => 'Campuran', 'satu' => 'Bermasalah (1 bulan data)', 'belum' => 'Belum dinilai'];
+    $lblSt   = function (?array $e): string {
+        if ($e === null) return '–';
+        switch ($e['status']) {
+            case 'tepat':       return 'Tepat waktu';
+            case 'telat':       return 'Terlambat ' . (int)$e['telat'] . ' hr';
+            case 'sebagian':    return 'Sebagian';
+            case 'tidak':       return 'Tidak bayar';
+            case 'belum_tempo': return 'Belum jatuh tempo';
+            case 'keluar':      return 'Keluar dari nominatif';
+            default:            return 'Tanpa tgl angsuran';
+        }
+    };
+    $namaAo = 'Semua AO';
+    if ($ao !== '') {
+        $namaAo = $ao;
+        foreach (($d['aos'] ?? []) as $x) if ((string)($x['v'] ?? '') === $ao) { $namaAo = (string)$x['l']; break; }
+    }
+    $pj = (array)($d['pola_jumlah'] ?? []);
+
+    $meta = [
+        'Bulan: ' . $labelB((string)$bulan[0]['p']) . ($nB > 1 ? ' s/d ' . $labelB((string)$bulan[$nB - 1]['p']) : '') . '   |   AO: ' . $namaAo
+            . '   |   Toleransi keterlambatan: ' . $tol . ' hari' . ($pola !== '' ? '   |   Pola: ' . $lblPola[$pola] : '') . ($nama !== '' ? '   |   Cari: ' . $nama : ''),
+        'Rekening dinilai: ' . rp_teks($d['total_rek'] ?? 0) . '   |   Tepat waktu terus: ' . rp_teks($pj['tepat'] ?? 0) . '   |   Selalu bermasalah: ' . rp_teks($pj['selalu'] ?? 0)
+            . '   |   Campuran: ' . rp_teks($pj['campuran'] ?? 0) . '   |   Bermasalah (1 bulan data): ' . rp_teks($pj['satu'] ?? 0) . '   |   Belum dinilai: ' . rp_teks($pj['belum'] ?? 0),
+    ];
+    /*foreach ($bulan as $b) {
+        $meta[] = $labelB((string)$b['p']) . ' (posisi ' . $pend($b['dari']) . '–' . $pend($b['sampai']) . ', ' . rp_teks($b['posisi']) . ' posisi): dinilai ' . rp_teks($b['dinilai'])
+            . '   |   tepat ' . rp_teks($b['tepat']) . ' (' . $persen($b['pct_tepat']) . ')   |   terlambat ' . rp_teks($b['telat']) . '   |   sebagian ' . rp_teks($b['sebagian'])
+            . '   |   tidak bayar ' . rp_teks($b['tidak']) . '   |   belum jatuh tempo ' . rp_teks($b['belum_tempo'])
+            . '   |   kurang bayar pokok Rp ' . rp_teks($b['kurang_pkk']) . ', bunga Rp ' . rp_teks($b['kurang_bg']);
+    }*/
+
+    foreach ($bulan as $b) {
+        $meta[] = $labelB((string)$b['p']) . ' (posisi ' . $pend($b['dari'] ?? '') . ' - ' . $pend($b['sampai'] ?? '') . ') . ' . rp_teks($b['posisi'] ?? 0) . ' posisi: dinilai ' . rp_teks($b['dinilai'] ?? 0) .
+            ' | tepat ' . rp_teks($b['tepat'] ?? 0) . ' (' . $persen($b['pct_tepat'] ?? 0) . ') | terlambat ' . rp_teks($b['telat'] ?? 0) .
+            ' | sebagian ' . rp_teks($b['sebagian'] ?? 0) . 
+            ' | tidak bayar ' . rp_teks($b['tidak'] ?? 0) . 
+            ' | belum jatuh tempo ' . rp_teks($b['belum_tempo'] ?? 0) .
+            ' | kurang bayar pokok Rp ' . rp_teks($b['kurang_pkk'] ?? 0) . ' , bunga Rp ' . rp_teks($b['kurang_bg'] ?? 0);
+    }
+
+    $meta[] = 'Dicetak: ' . date('d/m/Y H:i') . ' oleh ' . (string)((auth_user() ?? [])['nama'] ?? '-');
+
+    $catatan = array_map('strval', (array)($d['peringatan'] ?? []));
+    if (!empty($d['terpotong'])) array_unshift($catatan, 'Daftar dibatasi ' . rp_teks(count((array)$d['rows'])) . ' baris pertama dari ' . rp_teks($d['total_daftar'] ?? 0) . '. Persempit dengan AO, pola, atau pencarian untuk melihat seluruhnya.');
+    $catatan[] = 'Penilaian per bulan hanya untuk rekening yang punya kewajiban bulan itu (kewajiban dari baseline periode). Tanggal angsuran = tanggal pada tgl pinjam (bulan yang lebih pendek: hari terakhir bulan). '
+        . 'Nominatif hanya diupload hari kerja, jadi batas bayar adalah posisi pertama pada atau sesudah tanggal angsuran (ditambah toleransi); pembayaran akhir pekan atau hari libur terlihat di posisi hari kerja berikutnya. '
+        . 'Tepat waktu = pokok dan bunga sudah terbayar penuh pada atau sebelum posisi batas; terlambat = terbayar penuh sesudahnya; sebagian = baru sebagian sampai akhir bulan; tidak bayar = belum ada pembayaran; '
+        . 'belum jatuh tempo = batas bayar belum tercapai di posisi yang ada. Selalu bermasalah = terlambat, sebagian, atau tidak bayar di semua bulan yang dinilai (minimal 2 bulan).';
+
+    $rows = [];
+    $sum  = [];
+    foreach ($bulan as $i => $_) { $sum['kp' . $i] = 0.0; $sum['kb' . $i] = 0.0; }
+    /*foreach (($d['rows'] ?? []) as $x) {
+        $row = [
+            'nama' => trim((string)($x['nama'] ?? '')), 'norek' => (string)($x['norek'] ?? ''), 'cif' => (string)($x['cif'] ?? ''), 'ao' => (string)($x['ao'] ?? ''),
+            'angs' => $x['hari_angsuran'] ?? null, 'xnunggak' => $x['xnunggak'] ?? null,
+            'pola' => $lblPola[$x['pola'] ?? ''] ?? (string)($x['pola'] ?? ''),
+            'masalah' => ($x['masalah'] ?? 0) . ' dari ' . ($x['dinilai'] ?? 0),
+            'kur_p' => isset($x['kurang_pkk']) ? (float)$x['kurang_pkk'] : null, 'kur_b' => isset($x['kurang_bg']) ? (float)$x['kurang_bg'] : null,
+        ];
+        foreach ((array)($x['bulan'] ?? []) as $i => $e) {
+            $e = is_array($e) ? $e : null;
+            $row['st' . $i] = $lblSt($e);
+            $row['tg' . $i] = $e['terpantau'] ?? null;
+            $nilai = $e !== null && in_array($e['status'], ['tepat', 'telat', 'sebagian', 'tidak'], true);     // belum jatuh tempo / tanpa tgl angsuran / keluar: kosong
+            $row['kp' . $i] = $nilai ? (float)$e['kurang_pkk'] : null;
+            $row['kb' . $i] = $nilai ? (float)$e['kurang_bg'] : null;
+            if ($nilai) { $sum['kp' . $i] += (float)$e['kurang_pkk']; $sum['kb' . $i] += (float)$e['kurang_bg']; }
+            $row['stt' . $i] = $e === null ? '–' : ($lblSt($e) . ($e['terpantau'] ? ' (bayar ' . $pend($e['terpantau']) . ')' : ''));
+        }
+        $rows[] = $row;
+    }*/
+    foreach (($d['rows'] ?? []) as $x) {
+        $row = [
+            'nama' => trim((string)($x['nama'] ?? '')), 'norek' => (string)($x['norek'] ?? ''), 'cif' => (string)($x['cif'] ?? ''), 'ao' => (string)($x['ao'] ?? ''),
+            'angs' => $x['hari_angsuran'] ?? null, 'xnunggak' => $x['xnunggak'] ?? null,
+            'pola' => $lblPola[$x['pola'] ?? ''] ?? (string)($x['pola'] ?? ''),
+            'masalah' => ($x['masalah'] ?? 0) . ' dari ' . ($x['dinilai'] ?? 0),
+            'kur_p' => isset($x['kurang_pkk']) ? (float)$x['kurang_pkk'] : null, 'kur_b' => isset($x['kurang_bg']) ? (float)$x['kurang_bg'] : null,
+        ];
+        foreach ((array)($x['bulan'] ?? []) as $i => $e) {
+            $e = is_array($e) ? $e : null;
+            // Gunakan $e['terpantau'] ?? null agar aman jika kuncinya tidak ada
+            $terpantauVal = $e['terpantau'] ?? null; 
+
+            $row['st' . $i] = $lblSt($e);
+            $row['tg' . $i] = $terpantauVal;
+            
+            $nilai = $e !== null && in_array($e['status'], ['tepat', 'telat', 'sebagian', 'tidak'], true);     
+            $row['kp' . $i] = $nilai ? (float)$e['kurang_pkk'] : null;
+            $row['kb' . $i] = $nilai ? (float)$e['kurang_bg'] : null;
+            if ($nilai) { $sum['kp' . $i] += (float)$e['kurang_pkk']; $sum['kb' . $i] += (float)$e['kurang_bg']; }
+            
+            // Perbaikan di sini juga menggunakan variabel aman
+            $row['stt' . $i] = $e === null ? '–' : ($lblSt($e) . ($terpantauVal ? ' (bayar ' . $pend($terpantauVal) . ')' : ''));
+        }
+        $rows[] = $row;
+    }
+    $terpotong = !empty($d['terpotong']);
+
+    $kolom = [
+        ['h' => 'No',            't' => 'no',   'w' => 4],
+        ['h' => 'Nama debitur',  'k' => 'nama', 'w' => 20],
+        ['h' => 'No. rekening',  'k' => 'norek','w' => 12],
+        ['h' => 'AO',            'k' => 'ao',   'w' => 12],
+        ['h' => 'Tgl angsuran',  'k' => 'angs', 't' => 'int', 'w' => 6],
+        ['h' => 'Pola',          'k' => 'pola', 'w' => 14],
+        ['h' => 'Bermasalah',    'k' => 'masalah', 'w' => 8],
+    ];
+    if ($pdf) {
+        foreach ($bulan as $i => $b) $kolom[] = ['h' => $labelB((string)$b['p']), 'k' => 'stt' . $i, 'w' => 16];
+        $kolom[] = ['h' => 'Kurang bayar pokok bulan terakhir (Rp)', 'k' => 'kur_p', 't' => 'rp', 'w' => 12];
+        $kolom[] = ['h' => 'Kurang bayar bunga bulan terakhir (Rp)', 'k' => 'kur_b', 't' => 'rp', 'w' => 12];
+        $total = ['kur_p' => array_sum(array_column($rows, 'kur_p')), 'kur_b' => array_sum(array_column($rows, 'kur_b'))];
+    } else {
+        array_splice($kolom, 3, 0, [['h' => 'CIF', 'k' => 'cif', 'w' => 12]]);
+        $kolom[] = ['h' => 'Nunggak (x)', 'k' => 'xnunggak', 't' => 'int', 'w' => 8];
+        foreach ($bulan as $i => $b) {
+            $lb = $labelB((string)$b['p']);
+            $kolom[] = ['h' => $lb . ' - status',                'k' => 'st' . $i, 'w' => 18];
+            $kolom[] = ['h' => $lb . ' - terbayar penuh (posisi)', 'k' => 'tg' . $i, 't' => 'date', 'w' => 12];
+            $kolom[] = ['h' => $lb . ' - kurang pokok (Rp)',     'k' => 'kp' . $i, 't' => 'rp', 'w' => 14];
+            $kolom[] = ['h' => $lb . ' - kurang bunga (Rp)',     'k' => 'kb' . $i, 't' => 'rp', 'w' => 14];
+        }
+        $total = $sum;
+    }
+
+    return [
+        'berkas'  => 'ketepatan_bayar',
+        'judul'   => 'Ketepatan Bayar Kewajiban Debitur',
+        'meta'    => $meta,
+        'kolom'   => $kolom,
+        'rows'    => $rows,
+        'total'   => $terpotong ? null : $total,
+        'catatan' => $catatan,
+    ];
+}
+
+// ---------------------------------------------------------------------------------------------
 // DAFTAR LAPORAN: kode menu (hak akses), batas baris PDF, fungsi pembangun
 // ---------------------------------------------------------------------------------------------
 $LAPORAN = [
@@ -894,6 +1082,7 @@ $LAPORAN = [
     'lap_absensi'       => ['menu' => 'web_lap_absensi', 'batas_pdf' => 1500, 'bangun' => 'export_absensi'],
     'progres'           => ['menu' => 'web_progres',     'batas_pdf' => 1500, 'bangun' => 'export_progres'],
     'debitur'           => ['menu' => 'web_debitur',     'batas_pdf' => 1500, 'bangun' => 'export_debitur'],
+    'ketepatan'         => ['menu' => 'web_ketepatan',   'batas_pdf' => 1500, 'bangun' => 'export_ketepatan'],
 ];
 
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') export_galat(405, 'Method tidak diizinkan.');

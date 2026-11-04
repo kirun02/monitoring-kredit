@@ -3,6 +3,7 @@ require __DIR__ . '/lib.php';
 page_head('Monitoring kredit', 'dash');
 ?>
 <link rel="stylesheet" href="https://cdn.datatables.net/1.13.11/css/jquery.dataTables.min.css">
+<div id="tagihanSaya" hidden></div>
 <div id="dash" aria-live="polite" style="transition:opacity .15s">
     <p class="muted">Memuat data…</p>
 </div>
@@ -238,6 +239,31 @@ page_head('Monitoring kredit', 'dash');
         });
 
         load(location.search.slice(1), false); // muat pertama kali
+    })();
+</script>
+<script>
+    // Kartu "Tagihan saya": hanya muncul untuk akun AO (API yang memutuskan dari app_user.kode_ao). Gagal atau bukan AO: kartu tetap tersembunyi.
+    (function() {
+        var box = document.getElementById('tagihanSaya'), nf = new Intl.NumberFormat('id-ID');
+        function tgl(s) { var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s || ''); return m ? m[3] + '/' + m[2] + '/' + m[1] : ''; }
+        function kpi(l, v, c, n) { return '<div class="card kpi"><div class="muted">' + l + '</div><div class="v ' + (c || '') + '">' + v + '</div>' + (n ? '<div class="n">' + n + '</div>' : '') + '</div>'; }
+        fetch('api/api_tagihan.php?ringkas=1', { credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
+            .then(function(r) { return r.ok ? r.json() : null; })
+            .then(function(d) {
+                if (!d || d.error || d.empty || d.bukan_ao || !d.ringkas) return;
+                var r = d.ringkas;
+                box.innerHTML = '<div class="row" style="align-items:center;justify-content:space-between;margin-bottom:0">' +
+                    '<div style="flex:1 1 300px"><b>Tagihan saya</b> <span class="muted">· posisi ' + tgl(d.tgl_posisi) + ' · tanggal pinjam 1–' + d.hari_batas + '</span></div>' +
+                    '<a class="btn primary" href="tagihan.php">Buka daftar tagihan →</a></div>' +
+                    '<div class="row">' +
+                    kpi('Perlu ditagih', nf.format(r.n), '', 'debitur') +
+                    kpi('Belum bayar sama sekali', nf.format(r.belum_bayar), r.belum_bayar ? 'bad' : '', 'sebagian ' + nf.format(r.sebagian)) +
+                    kpi('Belum dikunjungi', nf.format(r.belum_kunjung), r.belum_kunjung ? 'bad' : 'good', 'sudah dikunjungi ' + nf.format(r.sudah_kunjung)) +
+                    kpi('Janji bayar', nf.format(r.janji), '', 'janji lewat ' + nf.format(r.janji_lewat)) +
+                    '</div>';
+                box.hidden = false;
+            })
+            .catch(function() {});
     })();
 </script>
 <?php page_foot();

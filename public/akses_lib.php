@@ -27,6 +27,7 @@ const AKTIF_KE_KODE = [
     'laprencana'    => 'web_lap_rencana',
     'progres'       => 'web_progres',
     'artamas'       => 'web_kredit_arthamas',
+    'ketepatan'     => 'web_ketepatan',
 ];
 
 function akses_kode_aktif(string $active): string
