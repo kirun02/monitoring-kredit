@@ -13,16 +13,6 @@ function sikemas_tenor_maks(float $gram): int
     return $gram > 5 ? 24 : ($gram > 2 ? 18 : 12);
 }
 
-/** Tanggal (Y-m-d) ditambah N bulan; bila harinya tidak ada di bulan tujuan, dipakai hari terakhir bulan itu. */
-function sikemas_tambah_bulan(string $ymd, int $bulan): string
-{
-    $dt  = new DateTime($ymd);
-    $hari = (int)$dt->format('j');
-    $dt->modify('first day of +' . $bulan . ' months');
-    $dt->setDate((int)$dt->format('Y'), (int)$dt->format('n'), min($hari, (int)$dt->format('t')));
-    return $dt->format('Y-m-d');
-}
-
 function sikemas_baca(array $in): array
 {
     $t = function (string $k, int $maks = 200) use ($in): string {
@@ -81,7 +71,7 @@ function sikemas_baca(array $in): array
     $bungaTahun   = $d['satuan'] === 'bulan' ? $d['bunga'] * 12 : $d['bunga'];
     $d['sim']     = riplay_simulasi($d['nilai'], $d['tenor'], $bungaTahun, $d['metode'], 1);
     if ($d['angsuran'] <= 0) $d['angsuran'] = $d['sim']['angsuran1'];
-    $d['tgl_tempo'] = $d['tgl_akad'] !== '' ? sikemas_tambah_bulan($d['tgl_akad'], $d['tenor']) : '';
+    $d['tgl_tempo'] = $d['tgl_akad'] !== '' ? riplay_tambah_bulan($d['tgl_akad'], $d['tenor']) : '';
     $d['tenor_maks'] = $maks;
     return $d;
 }

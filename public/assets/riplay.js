@@ -59,5 +59,14 @@ window.RIPLAY = (function() {
         return ('0' + t.getDate()).slice(-2) + '/' + ('0' + (t.getMonth() + 1)).slice(-2) + '/' + t.getFullYear();
     }
 
-    return { angka: angka, desimal: desimal, rp: rp, nf: nf, formatRupiah: formatRupiah, simulasi: simulasi, tambahBulan: tambahBulan };
+    // sama seperti tambahBulan, tetapi hasilnya yyyy-mm-dd (untuk isi input tanggal)
+    function tambahBulanIso(iso, n) {
+        var p = String(iso).split('-');
+        if (p.length !== 3) return '';
+        var d = +p[2], t = new Date(+p[0], +p[1] - 1 + n, 1), akhir = new Date(t.getFullYear(), t.getMonth() + 1, 0).getDate();
+        t.setDate(Math.min(d, akhir));
+        return t.getFullYear() + '-' + ('0' + (t.getMonth() + 1)).slice(-2) + '-' + ('0' + t.getDate()).slice(-2);
+    }
+
+    return { angka: angka, desimal: desimal, rp: rp, nf: nf, formatRupiah: formatRupiah, simulasi: simulasi, tambahBulan: tambahBulan, tambahBulanIso: tambahBulanIso };
 })();

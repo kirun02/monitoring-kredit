@@ -4,7 +4,7 @@
  *
  *   POST api/export_riplay.php?produk=kredit           -> PDF dibuka di tab browser (Preview)
  *   POST api/export_riplay.php?produk=kredit&unduh=1   -> PDF diunduh
- *   produk: kredit | sikemas | deposito | tabungan | qurban | siswa (baru 'kredit' dan 'sikemas' yang sudah dibuat)
+ *   produk: kredit | sikemas | deposito | tabungan | qurban | siswa (baru kredit, sikemas, dan deposito yang sudah dibuat)
  *
  * Isian datang dari riplay.php lewat POST (data pribadi tidak masuk URL/log) dan TIDAK disimpan.
  * Validasi, simulasi, susunan dokumen, dan pembuat PDF ada di ../export_lib_riplay.php.
@@ -22,14 +22,20 @@ $AKSES = ['kredit' => 'web_kredit_arthamas', 'sikemas' => 'web_sikemas', 'deposi
 $produk = (string)($_GET['produk'] ?? 'kredit');
 if (!isset($AKSES[$produk])) export_galat(400, 'Produk tidak dikenal.');
 if (function_exists('boleh') && !boleh($AKSES[$produk])) export_galat(403, 'Kamu tidak punya akses ke RIPLAY produk ini.');
-if (!in_array($produk, ['kredit', 'sikemas'], true)) export_galat(501, 'RIPLAY untuk produk ini belum tersedia.');
+// produk selain kredit: [berkas pendukung, awalan fungsi (xxx_baca / xxx_html), footer PDF, awalan nama berkas]
+$PRODUK = [
+    'sikemas'  => ['export_riplay_sikemas.php',  'sikemas',  'RIPLAY Personal – SikEMAS',             'RIPLAY_SikEMAS_'],
+    'deposito' => ['export_riplay_deposito.php', 'deposito', 'RIPLAY Personal – Deposito Artha Mas',  'RIPLAY_Deposito_'],
+];
+if ($produk !== 'kredit' && !isset($PRODUK[$produk])) export_galat(501, 'RIPLAY untuk produk ini belum tersedia.');
 
 try {
     $unduh = (string)($_GET['unduh'] ?? '') === '1';
-    if ($produk === 'sikemas') {
-        require_once __DIR__ . '/../export_riplay_sikemas.php';
-        $d = sikemas_baca($_POST);
-        riplay_cetak(sikemas_html($d), 'RIPLAY Personal – SikEMAS', 'RIPLAY_SikEMAS_' . riplay_slug($d['nama']), $unduh);
+    if (isset($PRODUK[$produk])) {
+        list($berkas, $fn, $footer, $awalan) = $PRODUK[$produk];
+        require_once __DIR__ . '/../' . $berkas;
+        $d = call_user_func($fn . '_baca', $_POST);
+        riplay_cetak(call_user_func($fn . '_html', $d), $footer, $awalan . riplay_slug($d['nama']), $unduh);
     } else {
         riplay_pdf(riplay_baca($_POST), $unduh);                     // kredit
     }

@@ -9,7 +9,40 @@
  *   riplay_pdf()       cetak RIPLAY kredit
  *   riplay_cetak()     pembuat PDF umum untuk semua produk (A4 potret, kop BPR, footer), dipakai riplay_pdf() dan produk lain
  *   riplay_slug()      nama untuk nama berkas
+ *   riplay_in_*()      pembaca isian POST (teks, angka, desimal, pilihan, tanggal) + riplay_tambah_bulan(), dipakai produk baru
  */
+
+// ---------------- pembantu bersama untuk produk RIPLAY ----------------
+function riplay_in_teks(array $in, string $k, int $maks = 200): string
+{
+    return trim(mb_substr((string)preg_replace('/\s+/u', ' ', (string)($in[$k] ?? '')), 0, $maks));
+}
+function riplay_in_angka(array $in, string $k): int
+{
+    $s = preg_replace('/\D+/', '', (string)($in[$k] ?? ''));
+    return $s === '' ? 0 : (int)substr($s, 0, 13);
+}
+function riplay_in_desimal(array $in, string $k): float { return (float)str_replace(',', '.', (string)($in[$k] ?? '')); }
+function riplay_in_pilih(array $in, string $k, array $boleh, string $baku = ''): string
+{
+    $v = (string)($in[$k] ?? '');
+    return in_array($v, $boleh, true) ? $v : $baku;
+}
+/** Tanggal isian (Y-m-d) yang valid, kalau tidak: kosong. */
+function riplay_in_tgl(array $in, string $k): string
+{
+    $v = trim((string)($in[$k] ?? ''));
+    return (preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $v, $m) && checkdate((int)$m[2], (int)$m[3], (int)$m[1])) ? $v : '';
+}
+/** Tanggal (Y-m-d) ditambah N bulan; bila harinya tidak ada di bulan tujuan, dipakai hari terakhir bulan itu. */
+function riplay_tambah_bulan(string $ymd, int $bulan): string
+{
+    $dt   = new DateTime($ymd);
+    $hari = (int)$dt->format('j');
+    $dt->modify('first day of +' . $bulan . ' months');
+    $dt->setDate((int)$dt->format('Y'), (int)$dt->format('n'), min($hari, (int)$dt->format('t')));
+    return $dt->format('Y-m-d');
+}
 
 /** Simulasi pembayaran. Bunga per tahun (%), metode: flat | efektif | anuitas; $perBulan = jumlah bulan tiap periode angsuran. */
 function riplay_simulasi(int $plafon, int $tenor, float $bunga, string $metode, int $perBulan): array
