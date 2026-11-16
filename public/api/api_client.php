@@ -206,3 +206,80 @@ function api_proxy($jenis, array $keys)
     }
     exit;
 }
+
+
+/**
+ * Mengambil data debitur dan agunan secara bersamaan dari API backend,
+ * menggabungkannya berdasarkan nomor rekening (norek), dan mengirimkannya ke browser.
+ */
+function api_proxy_debitur_gabung_agunan(array $keys)
+{
+    header('Content-Type: application/json; charset=utf-8');
+    header('Cache-Control: no-store');
+    
+    $p = [];
+    foreach ($keys as $k) {
+        if (isset($_GET[$k]) && is_string($_GET[$k]) && $_GET[$k] !== '') $p[$k] = $_GET[$k];
+    }
+    
+    try {
+        // 1. Ambil data debitur utama
+        $resDebitur = api_call('debitur', ['params' => $p]);
+        if (($resDebitur['status'] ?? '') !== 'success') {
+            throw new RuntimeException('API Debitur: ' . ($resDebitur['message'] ?? 'gagal'));
+        }
+        $dataDebitur = $resDebitur['data'] ?? [];
+
+        // Jika baris data dari backend kosong, langsung teruskan respons kosongnya
+        if (!isset($dataDebitur['rows']) || empty($dataDebitur['rows'])) {
+            echo json_encode($dataDebitur, JSON_UNESCAPED_UNICODE | JSON_PARTIAL_OUTPUT_ON_ERROR);
+            exit;
+        }
+
+        // 2. KUMPULKAN NOREK & KIRIM 'daftar_norek' KE API AGUNAN
+        $agunanByNorek = [];
+        $daftarNorek = array_column($dataDebitur['rows'], 'norek');
+        
+        if (!empty($daftarNorek)) {
+            $pAgunan = $p;
+            // Pasang daftar_norek yang sudah di-whitelist oleh backend!
+            $pAgunan['daftar_norek'] = implode(',', $daftarNorek);
+
+            $resAgunan = api_call('debitur_agunan', ['params' => $pAgunan]);
+            if (($resAgunan['status'] ?? '') !== 'success') {
+                throw new RuntimeException('API Agunan: ' . ($resAgunan['message'] ?? 'gagal'));
+            }
+            $dataAgunan = $resAgunan['data'] ?? [];
+            $rowsAgunan = $dataAgunan['rows'] ?? [];
+
+            // 3. Kelompokkan array agunan berdasarkan 'norek'
+            foreach ($rowsAgunan as $agunan) {
+                $norekKey = trim((string)$agunan['norek']);
+                if ($norekKey === '') continue;
+                
+                if (!isset($agunanByNorek[$norekKey])) {
+                    $agunanByNorek[$norekKey] = [];
+                }
+                $agunanByNorek[$norekKey][] = $agunan;
+            }
+        }
+
+        // 4. Sisipkan data agunan ke setiap baris debitur yang cocok
+        foreach ($dataDebitur['rows'] as &$deb) {
+            $debNorek = trim((string)$deb['norek']);
+            
+            // Simpan daftar agunan milik debitur (jika tidak punya, set array kosong)
+            $deb['daftar_agunan'] = $agunanByNorek[$debNorek] ?? [];
+        }
+        unset($deb); // Putus referensi pointer loop
+
+        // Kirim hasil akhir struktur data gabungan ke DataTables di browser
+        echo json_encode($dataDebitur, JSON_UNESCAPED_UNICODE | JSON_PARTIAL_OUTPUT_ON_ERROR);
+        
+    } catch (Throwable $e) {
+        http_response_code(502);
+        error_log('api_proxy_debitur_gabung_agunan: ' . $e->getMessage());
+        echo json_encode(['error' => 'Layanan data gabungan tidak tersedia']);
+    }
+    exit;
+}

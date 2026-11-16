@@ -13,6 +13,7 @@ page_head('Tagihan AO', 'tagihan');
     .tag { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 12px; background: #E9F1EF; color: var(--ink); font-weight: 600; }
     .tag.good { background: #E4F2EC; color: var(--good); }
     .tag.bad { background: #FBE9E9; color: var(--bad); }
+    #tblTg tr.lunas td { background: #F4F8F7; }
     .tag.warn { background: #FFF4DC; color: var(--warn); }
 </style>
 
@@ -35,6 +36,8 @@ page_head('Tagihan AO', 'tagihan');
         </select>
     </label>
     <button type="submit" class="btn primary" id="tampil">Tampilkan</button>
+    <button type="button" class="btn" id="mundur" title="Geser rentang ke minggu sebelumnya">◀ Sebelumnya</button>
+    <button type="button" class="btn" id="maju" title="Geser rentang ke minggu berikutnya">Berikutnya ▶</button>
     <div class="bg" style="margin-left:auto">
         <a class="bg-btn bg-prev" id="lihatPdf" href="#" target="_blank" rel="noopener" aria-disabled="true" title="Lihat PDF di tab baru"><svg class="ic" aria-hidden="true"><use href="assets/ikon.svg#i-cari"/></svg>Preview</a>
         <a class="bg-btn bg-xls" id="unduhXlsx" href="#" aria-disabled="true" title="Unduh Excel"><svg class="ic" aria-hidden="true"><use href="assets/ikon.svg#i-xls"/></svg>Excel</a>
@@ -54,6 +57,7 @@ page_head('Tagihan AO', 'tagihan');
                     <th class="num">Tgl pinjam</th>
                     <th class="num">Kewajiban bln ini</th>
                     <th class="num">Sudah bayar</th>
+                    <th class="num">Bayar di rentang ini</th>
                     <th class="num">Kurang kewajiban</th>
                     <th class="num">Tunggakan awal</th>
                     <th class="num">Sisa tunggakan</th>
@@ -66,7 +70,7 @@ page_head('Tagihan AO', 'tagihan');
     <div class="muted" style="margin-top:8px">
         Rentang tanggal memilih debitur menurut <b>hari pada tanggal pinjam</b> (mis. 01 sampai 07), dalam satu bulan. Daftar debitur, kewajiban bulan ini, dan tunggakan awal diambil dari <b>baseline</b> bulan itu;
         pembayaran, sisa tunggakan, dan kolek dari <b>nominatif harian terakhir</b>. Debitur tampil bila kewajiban bulan ini belum terbayar penuh atau masih ada sisa tunggakan,
-        dan hilang bila keduanya sudah terpenuhi atau rekening sudah lunas (baki debet nol, atau sudah tidak ada di nominatif). Kunjungan dan telepon tidak menghilangkan debitur, hanya mengubah labelnya (dari catatan kunjungan dan catatan telepon bulan itu).
+        dan hilang bila keduanya sudah terpenuhi atau rekening sudah lunas (baki debet nol, atau sudah tidak ada di nominatif). Debitur dari <b>tanggal sebelumnya</b> (hari tgl pinjam sebelum tanggal awal) yang masih menunggak tetap tampil dan ditandai "Sebelumnya"; kolom <b>Bayar di rentang ini</b> membandingkan posisi terakhir dengan posisi sebelum tanggal awal. Rekening lunas tetap tampil dengan tanda "Lunas" (untuk tanggal sebelumnya, hanya yang baru lunas dalam rentang ini). Kunjungan dan telepon tidak menghilangkan debitur, hanya mengubah labelnya (dari catatan kunjungan dan catatan telepon bulan itu).
         Pokok dan bunga ditampilkan terpisah, tidak dijumlahkan. Semua angka dalam Rupiah.
     </div>
 </div>
@@ -103,18 +107,23 @@ page_head('Tagihan AO', 'tagihan');
 
         $.fn.dataTable.ext.errMode = 'none';
         var table = $('#tblTg').DataTable({
-            data: [], order: [], pageLength: 25, lengthMenu: [25, 50, 100, 250], language: window.DT_ID,
+            data: [], order: [], pageLength: 25, createdRow: function(row, data) { if (data.lunas) row.classList.add('lunas'); }, lengthMenu: [25, 50, 100, 250], language: window.DT_ID,
             columns: [
                 { data: 'nama', render: function(d, t, r) {
                     if (t !== 'display') return (r.nama + ' ' + r.norek + ' ' + r.alamat).trim();
-                    return '<b>' + esc(r.nama || '(tanpa nama)') + '</b><br><span class="muted">' + esc(r.norek) + ' · CIF ' + esc(r.cif) + '</span>' +
+                    return '<b>' + esc(r.nama || '(tanpa nama)') + '</b>' + (r.lunas ? ' <span class="tag good">Lunas</span>' : '') + '<br><span class="muted">' + esc(r.norek) + ' · CIF ' + esc(r.cif) + '</span>' +
                         '<br><span class="muted">kolek ' + esc(r.kolek == null ? '–' : r.kolek) + (r.xnunggak == null ? '' : ' · ' + esc(r.xnunggak) + 'x') + '</span>' +
                         (r.alamat ? '<br><span class="muted">' + esc(r.alamat) + '</span>' : '');
                 }, className: 'deb' },
                 { data: 'ao', render: function(d) { return esc(d); } },
-                { data: 'tgl_jt', className: 'num' },
+                { data: 'tgl_jt', className: 'num', render: function(d, t, r) {
+                    return t === 'display' ? esc(d) + (r.grup === 'sebelumnya' ? '<br><span class="tag warn">Sebelumnya</span>' : '') : d;
+                } },
                 { data: 'kw_pkk', className: 'num', render: function(d, t, r) { return t === 'display' ? pb(rp(r.kw_pkk), rp(r.kw_bg)) : r.kw_pkk + r.kw_bg; } },
                 { data: 'byr_pkk', className: 'num', render: function(d, t, r) { return t === 'display' ? pb(rp(r.byr_pkk), rp(r.byr_bg)) : r.byr_pkk + r.byr_bg; } },
+                { data: 'byr_rentang_pkk', className: 'num', render: function(d, t, r) {
+                    return t === 'display' ? ((r.byr_rentang_pkk || 0) + (r.byr_rentang_bg || 0) > 0 ? pb('<span class="good">' + rp(r.byr_rentang_pkk) + '</span>', '<span class="good">' + rp(r.byr_rentang_bg) + '</span>') : '<span class="muted">belum ada</span>') : (r.byr_rentang_pkk || 0) + (r.byr_rentang_bg || 0);
+                } },
                 { data: 'kurang_pkk', className: 'num', render: function(d, t, r) {
                     return t === 'display' ? (r.kurang_pkk == null ? '<span class="muted">–</span>' : pb(rp(r.kurang_pkk), rp(r.kurang_bg), true)) : (r.kurang_pkk || 0) + (r.kurang_bg || 0);
                 } },
@@ -169,12 +178,13 @@ page_head('Tagihan AO', 'tagihan');
             table.column(1).visible(!kunci && !d.sel.ao);                 // kolom AO hanya berguna bila daftar memuat lebih dari satu AO
 
             $$('judul').textContent = kunci ? 'Tagihan saya' : 'Tagihan AO';
-            $$('subTeks').textContent = d.ao.nama + ' · tanggal pinjam ' + d.hari_dari + '–' + d.hari_sampai + ' · baseline ' + tgl(d.posisi_baseline) + ' · pembayaran sampai posisi ' + tgl(d.posisi_akhir);
+            $$('subTeks').textContent = d.ao.nama + ' · tanggal pinjam ' + d.hari_dari + '–' + d.hari_sampai + (d.ada_sebelumnya ? ' (+ tanggal sebelumnya yang masih menunggak)' : '') + ' · baseline ' + tgl(d.posisi_baseline) + ' · pembayaran sampai posisi ' + tgl(d.posisi_akhir) + (d.ada_sebelumnya ? ' · bayar di rentang dihitung sejak ' + (d.posisi_pembanding ? 'posisi ' + tgl(d.posisi_pembanding) : 'awal bulan') : '');
             $$('peringatan').innerHTML = (d.peringatan || []).map(function(t) { return '<div class="flash info">' + esc(t) + '</div>'; }).join('');
 
             var r = d.ringkas;
             $$('kpi').innerHTML =
-                kpi('Perlu ditagih', nf.format(r.n), '', 'dari ' + nf.format(r.dinilai) + ' debitur pada rentang · lunas ' + nf.format(r.lunas_keluar)) +
+                kpi('Perlu ditagih', nf.format(r.n), '', 'rentang ' + nf.format(r.n_rentang) + ' · tanggal sebelumnya ' + nf.format(r.n_sebelumnya) + ' · lunas ' + nf.format(r.lunas_keluar)) +
+                kpi('Bayar di rentang ini', nf.format(r.ada_bayar_rentang), r.ada_bayar_rentang ? 'good' : '', 'belum bayar ' + nf.format(r.tanpa_bayar_rentang) + ' · Pokok ' + rp(r.bayar_rentang_pkk) + ' / Bunga ' + rp(r.bayar_rentang_bg)) +
                 kpi('Belum bayar sama sekali', nf.format(r.belum_bayar), r.belum_bayar ? 'bad' : '', 'sebagian ' + nf.format(r.sebagian) + ' · kewajiban lunas ' + nf.format(r.kewajiban_ok)) +
                 kpi('Belum dikunjungi', ADAKJ ? nf.format(r.belum_kunjung) : '–', ADAKJ && r.belum_kunjung ? 'bad' : 'good', ADAKJ ? 'sudah dikunjungi ' + nf.format(r.sudah_kunjung) : 'data kunjungan belum terbaca') +
                 kpi('Belum ditelepon', ADATP ? nf.format(r.belum_telepon) : '–', ADATP && r.belum_telepon ? 'bad' : 'good', ADATP ? 'sudah ditelepon ' + nf.format(r.sudah_telepon) : 'data telepon belum terbaca') +
@@ -182,6 +192,9 @@ page_head('Tagihan AO', 'tagihan');
                 kpi('Kurang kewajiban', 'Pokok ' + rp(r.kurang_pkk), 'bad', 'Bunga ' + rp(r.kurang_bg)) +
                 kpi('Sisa tunggakan', 'Pokok ' + rp(r.tung_sisa_pkk), '', 'Bunga ' + rp(r.tung_sisa_bg) + ' · awal ' + rp(r.tung_awal_pkk) + ' / ' + rp(r.tung_awal_bg));
             table.clear().rows.add(d.rows || []).draw();
+            var hariBln = new Date(+d.periode.slice(0, 4), +d.periode.slice(5, 7), 0).getDate();
+            $$('mundur').disabled = d.hari_dari <= 1;
+            $$('maju').disabled = d.sel.akhir.slice(8, 10) >= String(hariBln);
 
             // tombol cetak mengikuti filter yang SEDANG tampil (dari server)
             var p = new URLSearchParams({ awal: d.sel.awal, akhir: d.sel.akhir, urut: d.sel.urut });
@@ -191,6 +204,20 @@ page_head('Tagihan AO', 'tagihan');
             atur($$('unduhXlsx'), u + '&format=xlsx');
             atur($$('unduhPdf'), u + '&format=pdf&unduh=1');
         }
+
+        // geser rentang tanggal pinjam satu "minggu" (selebar rentang yang sedang dipilih), dalam bulan yang sama
+        function geser(arah) {
+            var a = f.awal.value, b = f.akhir.value;
+            if (!a || !b) return;
+            var da = +a.slice(8, 10), db = +b.slice(8, 10), len = db - da + 1, akhirBln = new Date(+a.slice(0, 4), +a.slice(5, 7), 0).getDate(), na, nb;
+            if (arah < 0) { nb = da - 1; if (nb < 1) return; na = Math.max(1, nb - len + 1); }
+            else { na = db + 1; if (na > akhirBln) return; nb = Math.min(akhirBln, na + len - 1); }
+            function p(x) { return a.slice(0, 8) + (x < 10 ? '0' : '') + x; }
+            f.awal.value = p(na); f.akhir.value = p(nb);
+            muat();
+        }
+        $$('mundur').addEventListener('click', function() { geser(-1); });
+        $$('maju').addEventListener('click', function() { geser(1); });
 
         form.addEventListener('submit', function(e) { e.preventDefault(); muat(); });
         muat();

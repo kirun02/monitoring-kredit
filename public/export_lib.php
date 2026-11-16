@@ -18,8 +18,10 @@ declare(strict_types=1);
  *   'rows'    => [ ['nama' => '...', ...], ... ],
  *   'total'   => ['baki' => 123, ...] | null,      // baris JUMLAH, kunci = 'k' kolom
  *   'catatan' => ['...'],                          // baris catatan di bawah tabel
+ *   'lembar'  => [ ['sheet' => 'Agunan', 'judul' => '...', 'meta' => ['...'], 'kolom' => [...seperti kolom di atas...], 'rows' => [...], 'catatan' => ['...']], ... ],
+ *                 // opsional: lembar tambahan setelah "Rincian", hanya di Excel (PDF tidak memuatnya)
  *   'ringkasan' => ['judul' => '', 'sub' => '', 'kolom' => ['Uraian', ...], 'baris' => [[...], ...], 'catatan' => ''],
- *                 // opsional: lembar "Ringkasan" di Excel, halaman terakhir di PDF
+ *                 // opsional: lembar pertama "Ringkasan" di Excel, bagian atas halaman pertama di PDF (di atas rincian)
  * ]
  */
 
@@ -110,13 +112,95 @@ function export_isi($ws, string $coord, $v, string $t): void
 }
 
 /**
- * Lembar kedua "Ringkasan" (opsional, dari $spec['ringkasan']):
+ * Lembar tambahan (opsional, dari $spec['lembar'][]): satu tabel sederhana per lembar, setelah lembar "Rincian".
+ *   ['sheet' => 'Agunan', 'judul' => 'Data Agunan', 'meta' => ['...'], 'kolom' => [['h' => 'Norek', 'k' => 'norek', 't' => 'text', 'w' => 16], ...], 'rows' => [...], 'catatan' => ['...']]
+ * Tipe kolom 't' sama seperti laporan utama (text | int | rp | date | datetime | no).
+ */
+function export_xlsx_lembar(Spreadsheet $ss, array $lb): void
+{
+    $ws   = $ss->createSheet();
+    $nm   = trim((string)preg_replace('/[\\\\\/?*\[\]:]/', ' ', (string)($lb['sheet'] ?? $lb['judul'] ?? 'Lembar')));
+    $ws->setTitle(function_exists('mb_substr') ? mb_substr($nm !== '' ? $nm : 'Lembar', 0, 31) : substr($nm !== '' ? $nm : 'Lembar', 0, 31));
+    $kol  = array_values((array)($lb['kolom'] ?? []));
+    $baris = array_values((array)($lb['rows'] ?? []));
+    $n    = max(1, count($kol));
+    $ak   = Coordinate::stringFromColumnIndex($n);
+
+    $r = 1;
+    $ws->setCellValueExplicit('A1', (string)($lb['judul'] ?? ''), DataType::TYPE_STRING);
+    $ws->mergeCells("A1:{$ak}1");
+    $ws->getStyle('A1')->getFont()->setBold(true)->setSize(13);
+    foreach ((array)($lb['meta'] ?? []) as $m) {
+        $r++;
+        $ws->setCellValueExplicit("A$r", (string)$m, DataType::TYPE_STRING);
+        $ws->mergeCells("A$r:$ak$r");
+        $ws->getStyle("A$r")->getFont()->setItalic(true)->getColor()->setRGB('4A5961');
+    }
+    $hdr = $r + 2;
+    foreach ($kol as $i => $c) {
+        $col = Coordinate::stringFromColumnIndex($i + 1);
+        $ws->setCellValueExplicit($col . $hdr, (string)($c['h'] ?? ''), DataType::TYPE_STRING);
+        $ws->getColumnDimension($col)->setWidth((float)($c['w'] ?? 14));
+    }
+    $sh = $ws->getStyle("A$hdr:$ak$hdr");
+    $sh->getFont()->setBold(true)->getColor()->setRGB('FFFFFF');
+    $sh->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('0F6B63');
+    $sh->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER)->setVertical(Alignment::VERTICAL_CENTER)->setWrapText(true);
+
+    $r = $hdr; $no = 0;
+    foreach ($baris as $row) {
+        $r++; $no++;
+        foreach ($kol as $i => $c) {
+            $t = (string)($c['t'] ?? 'text');
+            $v = $t === 'no' ? $no : ($row[$c['k'] ?? ''] ?? null);
+            export_isi($ws, Coordinate::stringFromColumnIndex($i + 1) . $r, $v, $t);
+        }
+    }
+    if (!$baris) {
+        $r++;
+        $ws->setCellValueExplicit("A$r", (string)($lb['kosong'] ?? 'Tidak ada data.'), DataType::TYPE_STRING);
+        $ws->mergeCells("A$r:$ak$r");
+    }
+    $awal = $hdr + 1; $akhir = $r;
+    foreach ($kol as $i => $c) {
+        $col = Coordinate::stringFromColumnIndex($i + 1);
+        $st  = $ws->getStyle("$col$awal:$col$akhir");
+        switch ((string)($c['t'] ?? 'text')) {
+            case 'rp':   $st->getNumberFormat()->setFormatCode('#,##0'); $st->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT); break;
+            case 'int':
+            case 'no':   $st->getNumberFormat()->setFormatCode('0'); $st->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER); break;
+            case 'date': $st->getNumberFormat()->setFormatCode('dd/mm/yyyy'); $st->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER); break;
+            case 'datetime': $st->getNumberFormat()->setFormatCode('dd/mm/yyyy hh:mm'); $st->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER); break;
+            default:     $st->getAlignment()->setWrapText(true);
+        }
+    }
+    $ws->getStyle("A$awal:$ak$akhir")->getAlignment()->setVertical(Alignment::VERTICAL_TOP);
+    $ws->getStyle("A$hdr:$ak$akhir")->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN)->getColor()->setRGB('B9C5C8');
+
+    $r = $akhir + 1;
+    foreach ((array)($lb['catatan'] ?? []) as $cat) {
+        $r++;
+        $ws->setCellValueExplicit("A$r", (string)$cat, DataType::TYPE_STRING);
+        $ws->mergeCells("A$r:$ak$r");
+        $ws->getStyle("A$r")->getFont()->setItalic(true)->setSize(8);
+    }
+
+    $ws->freezePane('A' . ($hdr + 1));
+    if ($baris) $ws->setAutoFilter("A$hdr:$ak" . ($awal + count($baris) - 1));
+    $ps = $ws->getPageSetup();
+    $ps->setOrientation(PageSetup::ORIENTATION_LANDSCAPE)->setPaperSize(PageSetup::PAPERSIZE_A4);
+    $ps->setFitToPage(true)->setFitToWidth(1)->setFitToHeight(0);
+    $ps->setRowsToRepeatAtTopByStartAndEnd($hdr, $hdr);
+}
+
+/**
+ * Lembar pertama "Ringkasan" (opsional, dari $spec['ringkasan']):
  *   ['judul' => '', 'sub' => '', 'kolom' => ['Uraian', 'Debitur', 'Pokok (Rp)', ...], 'baris' => [[teks, jumlah, rp, rp, ...], ...], 'catatan' => '']
  * Kolom pertama teks, kolom kedua bilangan bulat, sisanya Rupiah; null tampil sebagai "–".
  */
 function export_xlsx_ringkasan(Spreadsheet $ss, array $rg): void
 {
-    $ws  = $ss->createSheet();                       // lembar aktif tetap "Laporan"
+    $ws  = $ss->createSheet(0);                      // lembar PERTAMA (di atas rincian)
     $ws->setTitle('Ringkasan');
     $kol = array_values((array)($rg['kolom'] ?? []));
     $n   = max(1, count($kol));
@@ -181,7 +265,7 @@ function export_xlsx(array $spec, ?array $kop, string $nama): void
     $ss->getProperties()->setCreator('Monitoring Kredit')->setTitle((string)$spec['judul']);
     $ss->getDefaultStyle()->getFont()->setName('Arial')->setSize(9);
     $ws = $ss->getActiveSheet();
-    $ws->setTitle('Laporan');
+    $ws->setTitle('Rincian');
 
     // ---- kop + logo (baris 1-3, baris 4 jarak) ----
     $r = 0;
@@ -325,6 +409,7 @@ function export_xlsx(array $spec, ?array $kop, string $nama): void
     $ws->getPageMargins()->setTop(0.5)->setBottom(0.6)->setLeft(0.4)->setRight(0.4);
     $ws->getHeaderFooter()->setOddFooter('&L&8Monitoring Kredit&C&8Halaman &P dari &N&R&8&D');
 
+    foreach ((array)($spec['lembar'] ?? []) as $lb) export_xlsx_lembar($ss, (array)$lb);   // lembar tambahan (mis. Agunan) setelah Rincian
     if (!empty($spec['ringkasan'])) export_xlsx_ringkasan($ss, (array)$spec['ringkasan']);
     $ss->setActiveSheetIndex(0);
 
@@ -401,7 +486,7 @@ function export_pdf_tabel(array $kol, array $baris, ?array $total, string $koson
 function export_pdf_ringkasan(array $rg): string
 {
     $kol = array_values((array)($rg['kolom'] ?? []));
-    $b  = '<pagebreak /><h1>' . h_e($rg['judul'] ?? 'Ringkasan') . '</h1><div class="meta">' . h_e($rg['sub'] ?? '') . '</div>';
+    $b  = '<h2>' . h_e($rg['judul'] ?? 'Ringkasan') . '</h2><div class="meta">' . h_e($rg['sub'] ?? '') . '</div>';
     $b .= '<table class="data"><thead><tr>';
     foreach ($kol as $i => $h) {
         $b .= '<th style="width:' . ($i === 0 ? '46' : round(54 / max(1, count($kol) - 1), 2)) . '%">' . h_e($h) . '</th>';
@@ -423,7 +508,7 @@ function export_pdf_ringkasan(array $rg): string
     }
     $b .= '</tbody></table>';
     if (!empty($rg['catatan'])) $b .= '<div class="cat">' . h_e($rg['catatan']) . '</div>';
-    return $b;
+    return $b . '<pagebreak /><h2>Rincian</h2>';     // rincian mulai di halaman berikutnya
 }
 
 function export_pdf(array $spec, ?array $kop, string $nama): void
@@ -463,6 +548,7 @@ function export_pdf(array $spec, ?array $kop, string $nama): void
     }
     $b .= '<h1>' . h_e($spec['judul']) . '</h1>';
     foreach (($spec['meta'] ?? []) as $m) $b .= '<div class="meta">' . h_e($m) . '</div>';
+    if (!empty($spec['ringkasan'])) $b .= export_pdf_ringkasan((array)$spec['ringkasan']);   // ringkasan DI ATAS rincian
 
     if ($bagian) {
         foreach ($bagian as $bg) {
@@ -473,7 +559,6 @@ function export_pdf(array $spec, ?array $kop, string $nama): void
         $b .= export_pdf_tabel($tanpaXlsx((array)$spec['kolom']), (array)$spec['rows'], $spec['total'] ?? null);
     }
     foreach (($spec['catatan'] ?? []) as $cat) $b .= '<div class="cat">' . h_e($cat) . '</div>';
-    if (!empty($spec['ringkasan'])) $b .= export_pdf_ringkasan((array)$spec['ringkasan']);
 
     $tmp = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'mpdf';
     if (!is_dir($tmp)) @mkdir($tmp, 0775, true);

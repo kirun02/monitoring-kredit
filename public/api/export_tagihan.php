@@ -61,7 +61,7 @@ try {
     };
     $rows = [];
     $sum = ['kw_pkk' => 0.0, 'kw_bg' => 0.0, 'byr_pkk' => 0.0, 'byr_bg' => 0.0, 'kurang_pkk' => 0.0, 'kurang_bg' => 0.0,
-            'tung_awal_pkk' => 0.0, 'tung_awal_bg' => 0.0, 'tung_sisa_pkk' => 0.0, 'tung_sisa_bg' => 0.0];
+            'tung_awal_pkk' => 0.0, 'tung_awal_bg' => 0.0, 'tung_sisa_pkk' => 0.0, 'tung_sisa_bg' => 0.0, 'byr_r_pkk' => 0.0, 'byr_r_bg' => 0.0];
     foreach ((array)($d['rows'] ?? []) as $x) {
         $kv = $x['kunjungan'] ?? null;
         $kjTeks = $aktTeks($kv, 'Belum dikunjungi', $kjOk);
@@ -73,6 +73,8 @@ try {
             'kw_pkk' => (float)$x['kw_pkk'], 'kw_bg' => (float)$x['kw_bg'], 'byr_pkk' => (float)$x['byr_pkk'], 'byr_bg' => (float)$x['byr_bg'],
             'kurang_pkk' => $x['kurang_pkk'], 'kurang_bg' => $x['kurang_bg'],
             'tung_awal_pkk' => $x['tung_awal_pkk'], 'tung_awal_bg' => $x['tung_awal_bg'], 'tung_sisa_pkk' => $x['tung_sisa_pkk'], 'tung_sisa_bg' => $x['tung_sisa_bg'],
+            'grup' => (($x['grup'] ?? 'rentang') === 'sebelumnya') ? 'Sebelumnya' : 'Rentang ini', 'lunas' => !empty($x['lunas']) ? 'LUNAS' : '',
+            'byr_r_pkk' => (float)($x['byr_rentang_pkk'] ?? 0), 'byr_r_bg' => (float)($x['byr_rentang_bg'] ?? 0),
             'kunjungan' => $kjTeks,
             'kj_n' => $kv ? $kv['n'] : 0, 'kj_terakhir' => $kv ? tg_tgl($kv['terakhir']) : '', 'kj_komit' => ($kv && !empty($kv['komit'])) ? tg_tgl($kv['komit']) : '',
             'kj_ket' => $kv ? (string)$kv['ket'] : '',
@@ -84,6 +86,8 @@ try {
         $pb = function ($a, $b) { return $a === null ? '–' : tg_rp($a) . ' / ' . tg_rp($b ?? 0); };
         $row['t_kw']     = $pb($row['kw_pkk'], $row['kw_bg']);
         $row['t_byr']    = $pb($row['byr_pkk'], $row['byr_bg']);
+        $row['t_byr_r']  = $pb($row['byr_r_pkk'], $row['byr_r_bg']);
+        $row['ket_asal'] = $row['grup'] . ($row['lunas'] !== '' ? ' · LUNAS' : '');
         $row['t_kurang'] = $pb($row['kurang_pkk'], $row['kurang_bg']);
         $row['t_awal']   = $pb($row['tung_awal_pkk'], $row['tung_awal_bg']);
         $row['t_sisa']   = $pb($row['tung_sisa_pkk'], $row['tung_sisa_bg']);
@@ -91,39 +95,50 @@ try {
         $rows[] = $row;
     }
 
-    // ---- RINGKASAN (lembar terpisah di Excel, halaman terakhir di PDF): hanya debitur yang tampil di daftar tagihan ----
+    // ---- RINGKASAN (tampil DI ATAS rincian: lembar pertama di Excel, bagian atas halaman pertama di PDF) ----
     $batasNpl = (int)($d['batas_npl'] ?? 90);
-    $g = ['n' => 0, 'kw_pkk' => 0.0, 'kw_bg' => 0.0, 'byr_pkk' => 0.0, 'byr_bg' => 0.0,
-          'tg_pkk' => 0.0, 'tg_bg' => 0.0, 'ta_pkk' => 0.0, 'ta_bg' => 0.0,
-          'pot_n' => 0, 'pot_baki' => 0.0, 'npl_n' => 0, 'npl_baki' => 0.0];
+    $g = ['semua' => 0, 'kw_pkk' => 0.0, 'kw_bg' => 0.0, 'seb_n' => 0, 'seb_kw_pkk' => 0.0, 'seb_kw_bg' => 0.0,
+          'byr_pkk' => 0.0, 'byr_bg' => 0.0,
+          'n' => 0, 'tg_pkk' => 0.0, 'tg_bg' => 0.0, 'ta_pkk' => 0.0, 'ta_bg' => 0.0,
+          'pot_n' => 0, 'pot_baki' => 0.0, 'npl_n' => 0, 'npl_baki' => 0.0,
+          'lunas_n' => 0, 'lunas_baki' => 0.0, 'br_n' => 0, 'br_pkk' => 0.0, 'br_bg' => 0.0];
     foreach ((array)($d['rows'] ?? []) as $x) {
+        $g['semua']++;
+        $g['kw_pkk']  += (float)$x['kw_pkk'];   $g['kw_bg']  += (float)$x['kw_bg'];
+        $g['byr_pkk'] += (float)$x['byr_pkk'];  $g['byr_bg'] += (float)$x['byr_bg'];
+        if (($x['grup'] ?? 'rentang') === 'sebelumnya') { $g['seb_n']++; $g['seb_kw_pkk'] += (float)$x['kw_pkk']; $g['seb_kw_bg'] += (float)$x['kw_bg']; }
+        if (!empty($x['lunas'])) { $g['lunas_n']++; $g['lunas_baki'] += (float)$x['baki']; continue; }   // lunas: hanya masuk hitungan pelunasan
         $g['n']++;
-        $g['kw_pkk']  += (float)$x['kw_pkk'];         $g['kw_bg']  += (float)$x['kw_bg'];
-        $g['byr_pkk'] += (float)$x['byr_pkk'];        $g['byr_bg'] += (float)$x['byr_bg'];
-        $g['tg_pkk']  += (float)$x['tung_sisa_pkk'];  $g['tg_bg']  += (float)$x['tung_sisa_bg'];
-        $g['ta_pkk']  += (float)$x['tung_awal_pkk'];  $g['ta_bg']  += (float)$x['tung_awal_bg'];
+        $g['tg_pkk'] += (float)$x['tung_sisa_pkk'];  $g['tg_bg'] += (float)$x['tung_sisa_bg'];
+        $g['ta_pkk'] += (float)$x['tung_awal_pkk'];  $g['ta_bg'] += (float)$x['tung_awal_bg'];
         $hr = (int)$x['hari'];
         if ($hr > $batasNpl)          { $g['npl_n']++; $g['npl_baki'] += (float)$x['baki']; }
         elseif ($hr > $batasNpl - 30) { $g['pot_n']++; $g['pot_baki'] += (float)$x['baki']; }
+        $brp = (float)($x['byr_rentang_pkk'] ?? 0); $brb = (float)($x['byr_rentang_bg'] ?? 0);
+        if ($brp + $brb > 0) { $g['br_n']++; $g['br_pkk'] += $brp; $g['br_bg'] += $brb; }
     }
     $tungOk  = !empty($d['tung_tersedia']);
     $rentang = 'tgl pinjam ' . $d['hari_dari'] . '–' . $d['hari_sampai'];
+    $adaSeb  = !empty($d['ada_sebelumnya']);
+    $sejak   = !empty($d['posisi_pembanding']) ? 'sejak posisi ' . tg_tgl($d['posisi_pembanding']) : 'sejak awal bulan';
+    $baris = [
+        ['1. Total kewajiban bulan ini (' . $rentang . ($adaSeb ? ' + tanggal sebelumnya' : '') . ')', $g['semua'], $g['kw_pkk'], $g['kw_bg'], null],
+    ];
+    if ($adaSeb) $baris[] = ['    Di antaranya dari tanggal sebelumnya (tgl pinjam 1–' . ((int)$d['hari_dari'] - 1) . ')', $g['seb_n'], $g['seb_kw_pkk'], $g['seb_kw_bg'], null];
+    $baris[] = ['2. Total tunggakan (sisa)',                                                         $g['n'], $tungOk ? $g['tg_pkk'] : null, $tungOk ? $g['tg_bg'] : null, null];
+    $baris[] = ['    Tunggakan awal (baseline)',                                                     $g['n'], $tungOk ? $g['ta_pkk'] : null, $tungOk ? $g['ta_bg'] : null, null];
+    $baris[] = ['3. Berpotensi masuk NPL (hari tunggak ' . ($batasNpl - 29) . '–' . $batasNpl . ')', $g['pot_n'], null, null, $g['pot_baki']];
+    $baris[] = ['    Sudah NPL (lebih dari ' . $batasNpl . ' hari)',                                  $g['npl_n'], null, null, $g['npl_baki']];
+    $baris[] = ['4. Pelunasan (baki debet nol)',                                                     $g['lunas_n'], null, null, $g['lunas_baki']];
+    $baris[] = ['5. Pembayaran angsuran bulan ini (kumulatif)',                                      $g['semua'], $g['byr_pkk'], $g['byr_bg'], null];
+    $baris[] = ['    Pembayaran dalam rentang ini (' . $sejak . ')',                                 $g['br_n'], $g['br_pkk'], $g['br_bg'], null];
     $ringkasan = [
         'judul'   => 'Ringkasan Tagihan',
-        'sub'     => $rentang . ' · periode ' . $d['periode'] . ' · ' . $d['ao']['nama'] . ' · ' . tg_rp($g['n']) . ' debitur pada daftar tagihan',
+        'sub'     => $rentang . ($adaSeb ? ' + tanggal sebelumnya' : '') . ' · periode ' . $d['periode'] . ' · ' . $d['ao']['nama'] . ' · ' . tg_rp($g['semua']) . ' debitur pada rincian',
         'kolom'   => ['Uraian', 'Debitur', 'Pokok (Rp)', 'Bunga (Rp)', 'Baki debet (Rp)'],
-        'baris'   => [
-            ['1. Total kewajiban bulan ini (' . $rentang . ')',                                   $g['n'], $g['kw_pkk'], $g['kw_bg'], null],
-            ['2. Total tunggakan (sisa)',                                                         $g['n'], $tungOk ? $g['tg_pkk'] : null, $tungOk ? $g['tg_bg'] : null, null],
-            ['    Tunggakan awal (baseline)',                                                     $g['n'], $tungOk ? $g['ta_pkk'] : null, $tungOk ? $g['ta_bg'] : null, null],
-            ['3. Berpotensi masuk NPL (hari tunggak ' . ($batasNpl - 29) . '–' . $batasNpl . ')', $g['pot_n'], null, null, $g['pot_baki']],
-            ['    Sudah NPL (lebih dari ' . $batasNpl . ' hari)',                                  $g['npl_n'], null, null, $g['npl_baki']],
-            ['4. Pelunasan (baki debet nol)',                                                     (int)($rk['lunas_keluar'] ?? 0), null, null, (float)($rk['lunas_baki'] ?? 0)],
-            ['    Pembayaran angsuran bulan ini (debitur yang masih di daftar)',                  $g['n'], $g['byr_pkk'], $g['byr_bg'], null],
-        ],
-        'catatan' => 'Poin 1, 2, 3, dan pembayaran angsuran dihitung dari debitur yang tampil di daftar tagihan. '
-                   . 'Pelunasan = rekening di baseline yang baki debetnya nol di nominatif terakhir (atau sudah tidak ada di nominatif); nilainya baki debet awal (baseline). Pembayaran angsuran dipisah dari pelunasan. '
-                   . 'Pokok dan bunga tidak dijumlahkan.',
+        'baris'   => $baris,
+        'catatan' => 'Poin 1 dan 5 mencakup semua debitur pada rincian (termasuk yang lunas); poin 2 dan 3 hanya debitur yang belum lunas; poin 4 debitur lunas (nilai = baki debet awal/baseline). '
+                   . 'Debitur dari tanggal sebelumnya ikut bila masih menunggak, atau baru lunas dalam rentang ini. Pokok dan bunga tidak dijumlahkan.',
     ];
 
     if ($pdf) {
@@ -136,9 +151,11 @@ try {
         $kolom = array_merge($kolom, [
             ['h' => 'Alamat',        'k' => 'alamat', 'w' => 17],
             ['h' => 'Tgl pinjam',    'k' => 'tgl_jt', 't' => 'int', 'w' => 4],
+            ['h' => 'Asal',          'k' => 'ket_asal', 'w' => 8],
             ['h' => 'Kolek / nunggak', 'k' => 't_kolek', 'w' => 6],
             ['h' => 'Kewajiban bln ini pokok / bunga', 'k' => 't_kw',     'w' => 11],
             ['h' => 'Sudah bayar pokok / bunga',       'k' => 't_byr',    'w' => 10],
+            ['h' => 'Bayar di rentang pokok / bunga',  'k' => 't_byr_r',  'w' => 10],
             ['h' => 'Kurang kewajiban pokok / bunga',  'k' => 't_kurang', 'w' => 11],
             ['h' => 'Tunggakan awal pokok / bunga',    'k' => 't_awal',   'w' => 12],
             ['h' => 'Sisa tunggakan pokok / bunga',    'k' => 't_sisa',   'w' => 12],
@@ -155,12 +172,16 @@ try {
             ['h' => 'AO',            'k' => 'ao',   'w' => 16],
             ['h' => 'Alamat',        'k' => 'alamat', 'w' => 34],
             ['h' => 'Tgl pinjam (hari)', 'k' => 'tgl_jt', 't' => 'int', 'w' => 9],
+            ['h' => 'Asal',          'k' => 'grup', 'w' => 12],
+            ['h' => 'Lunas',         'k' => 'lunas', 'w' => 8],
             ['h' => 'Kolek',         'k' => 'kolek', 't' => 'int', 'w' => 7],
             ['h' => 'Nunggak (x)',   'k' => 'xnunggak', 't' => 'int', 'w' => 8],
             ['h' => 'Kewajiban bln ini pokok (Rp)', 'k' => 'kw_pkk', 't' => 'rp', 'w' => 16],
             ['h' => 'Kewajiban bln ini bunga (Rp)', 'k' => 'kw_bg',  't' => 'rp', 'w' => 16],
             ['h' => 'Sudah bayar pokok (Rp)',       'k' => 'byr_pkk', 't' => 'rp', 'w' => 15],
             ['h' => 'Sudah bayar bunga (Rp)',       'k' => 'byr_bg',  't' => 'rp', 'w' => 15],
+            ['h' => 'Bayar di rentang pokok (Rp)',  'k' => 'byr_r_pkk', 't' => 'rp', 'w' => 16],
+            ['h' => 'Bayar di rentang bunga (Rp)',  'k' => 'byr_r_bg',  't' => 'rp', 'w' => 16],
             ['h' => 'Kurang kewajiban pokok (Rp)',  'k' => 'kurang_pkk', 't' => 'rp', 'w' => 16],
             ['h' => 'Kurang kewajiban bunga (Rp)',  'k' => 'kurang_bg',  't' => 'rp', 'w' => 16],
             ['h' => 'Tunggakan awal pokok (Rp)',    'k' => 'tung_awal_pkk', 't' => 'rp', 'w' => 16],
@@ -189,7 +210,7 @@ try {
         'Dicetak: ' . date('d/m/Y H:i') . ' oleh ' . (string)($u['nama'] ?? '-'),
     ];
     $catatan = array_map('strval', (array)($d['peringatan'] ?? []));
-    $catatan[] = 'Rentang tanggal memilih debitur menurut hari pada tanggal pinjam. Daftar, kewajiban bulan ini, dan tunggakan awal dari baseline; pembayaran dan sisa tunggakan dari nominatif harian terakhir. '
+    $catatan[] = 'Rentang tanggal memilih debitur menurut hari pada tanggal pinjam; debitur dari tanggal sebelumnya yang masih menunggak ikut ditampilkan (kolom Asal), dan rekening lunas (baki debet nol) tetap tampil dengan tanda LUNAS. Daftar, kewajiban bulan ini, dan tunggakan awal dari baseline; pembayaran dan sisa tunggakan dari nominatif harian terakhir. '
         . 'Debitur tampil bila kewajiban bulan ini belum terbayar penuh atau masih ada sisa tunggakan; hilang bila keduanya terpenuhi atau rekening sudah tidak ada di nominatif (lunas). '
         . 'Kewajiban dan tunggakan tidak dijumlahkan; pokok dan bunga ditampilkan terpisah' . ($pdf ? ' (dalam satu sel: pokok / bunga)' : '') . '. Kunjungan dan telepon dihitung dari catatan bulan itu.';
 

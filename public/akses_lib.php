@@ -28,6 +28,10 @@ const AKTIF_KE_KODE = [
     'progres'       => 'web_progres',
     'artamas'       => 'web_kredit_arthamas',
     'ketepatan'     => 'web_ketepatan',
+    'promosi'       => 'web_promosi',
+    'lappromosi'    => 'web_lap_promosi',
+    'telepon'       => 'web_telepon',
+    'laptelepon'    => 'web_lap_telepon',
 ];
 
 function akses_kode_aktif(string $active): string

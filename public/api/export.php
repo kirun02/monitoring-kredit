@@ -776,7 +776,7 @@ function export_progres(): array
 
 // ---------------------------------------------------------------------------------------------
 // LAPORAN: daftar debitur per posisi (menu Debitur): tanggal posisi, AO, kolek, hari tunggak, dan kotak Cari di halaman
-function export_debitur(): array
+/*function export_debitur(): array
 {
     $tgl   = trim((string)($_GET['tgl'] ?? ''));
     $ao    = trim((string)($_GET['ao'] ?? ''));
@@ -881,8 +881,207 @@ function export_debitur(): array
             'Urutan: hari tunggak terbanyak. Total tunggakan pokok dan bunga ditampilkan terpisah. Tagihan bulan ini = kewajiban pokok + bunga bulan ini; bayar bulan ini = pembayaran pokok + bunga bulan ini.',
         ])),
     ];
-}
+}*/
 
+// ---------------------------------------------------------------------------------------------
+// LAPORAN: daftar debitur per posisi (menu Debitur): tanggal posisi, AO, kolek, hari tunggak, dan kotak Cari di halaman
+function export_debitur(): array
+{
+    if (function_exists('set_time_limit')) { @set_time_limit(240); }
+
+    $tgl   = trim((string)($_GET['tgl'] ?? ''));
+    $ao    = trim((string)($_GET['ao'] ?? ''));
+    $kolek = trim((string)($_GET['kolek'] ?? ''));
+    $aging = trim((string)($_GET['aging'] ?? ''));
+    $cari  = trim((string)($_GET['cari'] ?? ''));
+    if ($tgl !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $tgl))                export_galat(422, 'Tanggal posisi tidak valid.');
+    if ($ao !== '' && !preg_match('/^[A-Za-z0-9_.\-]{1,20}$/', $ao))                export_galat(422, 'Kode AO tidak valid.');
+    if ($kolek !== '' && !in_array($kolek, ['1', '2', '3', '4', '5', 'npl'], true)) export_galat(422, 'Kolek tidak valid.');
+    if ($aging !== '' && !in_array($aging, ['0', '1', '2', '3', '4'], true))        export_galat(422, 'Kelompok hari tunggak tidak valid.');
+    if (mb_strlen($cari) > 40) $cari = mb_substr($cari, 0, 40);
+
+    $p = [];
+    if ($tgl !== '')   $p['tgl']   = $tgl;
+    if ($ao !== '')    $p['ao']    = $ao;
+    if ($kolek !== '') $p['kolek'] = $kolek;
+    if ($aging !== '') $p['aging'] = $aging;
+
+    // 1. Ambil data debitur utama dari API
+    $r = api_call('debitur', ['params' => $p]);            
+    if (($r['status'] ?? '') !== 'success') export_galat(502, (string)($r['message'] ?? 'Data tidak dapat dimuat dari server.'));
+    $d = (array)($r['data'] ?? []);
+    if (!empty($d['empty'])) export_galat(404, 'Belum ada data posisi. Upload nominatif dulu.');
+
+    // 2. Agunan: SATU panggilan dengan filter yang sama seperti daftar debitur (tgl, ao, kolek, aging). Pemilahan kotak Cari dilakukan di bawah.
+    //    Path dikirim eksplisit (sama seperti 'progres_detail' / 'ketepatan_detail'), jadi tidak bergantung pada api_path().
+    $agunanByNorek = [];
+    $catAgunan = null;                       // keterangan di bagian catatan bila agunan tidak bisa dimuat / belum ada datanya
+    if (!empty($d['rows'])) {
+        try {
+            $rAgunan = api_call('debitur_agunan', ['params' => $p], api_cfg()['path_monitoring'], 120);
+            $dAg = (array)($rAgunan['data'] ?? []);
+            if (($rAgunan['status'] ?? '') !== 'success') {
+                $catAgunan = 'Data agunan tidak dapat dimuat dari server, jadi kolom agunan dikosongkan.';
+                error_log('export_debitur: debitur_agunan gagal: ' . substr((string)($rAgunan['message'] ?? 'tanpa pesan'), 0, 200));
+            } elseif (empty($dAg['tersedia'])) {
+                $catAgunan = (string)($dAg['pesan'] ?? 'Data agunan belum tersedia.');
+            } else {
+                foreach ((array)($dAg['rows'] ?? []) as $ag) {
+                    $norekKey = preg_replace('/[^0-9A-Za-z]/', '', (string)$ag['norek']);      // samakan bentuk norek (buang spasi / tanda baca)
+                    if ($norekKey === '') continue;
+                    $agunanByNorek[$norekKey][] = [
+                        'kd_agunan' => (string)($ag['kode_agunan'] ?? '–'),
+                        'js_agunan' => (string)($ag['jenis_agunan'] ?? '–'),
+                        'pemilik'   => (string)($ag['pemilik_agunan'] ?? '–'),
+                        'js_ikat'   => (string)($ag['jenis_ikat'] ?? '–'),
+                        'n_bank'    => $ag['nilai_bank'] !== null ? (float)$ag['nilai_bank'] : null,
+                        'n_ht'      => $ag['nilai_ht'] !== null ? (float)$ag['nilai_ht'] : null,
+                        'n_njop'    => $ag['nilai_njop'] !== null ? (float)$ag['nilai_njop'] : null,
+                        'tgl_ikat'  => !empty($ag['tgl_pengikatan']) ? date('d/m/Y', strtotime((string)$ag['tgl_pengikatan'])) : '–',
+                        'alm_agun'  => (string)($ag['alamat_agunan'] ?? '–'),
+                    ];
+                }
+                if (!empty($dAg['terpotong'])) $catAgunan = 'Data agunan dibatasi ' . ($dAg['batas'] ?? '20.000') . ' baris pertama; persempit filter untuk melihat seluruhnya.';
+            }
+        } catch (Throwable $e) {
+            $catAgunan = 'Data agunan tidak dapat dimuat (layanan tidak tersedia), jadi kolom agunan dikosongkan.';
+            error_log('export_debitur: debitur_agunan galat: ' . get_class($e) . ': ' . substr($e->getMessage(), 0, 200));
+        }
+    }
+
+    $kata = $cari === '' ? [] : preg_split('/\s+/u', mb_strtolower($cari), -1, PREG_SPLIT_NO_EMPTY);
+
+    $rows = [];
+    $sum  = ['plafon' => 0.0, 'bakidebet' => 0.0, 'tung_pkk' => 0.0, 'tung_bg' => 0.0, 'tagihan' => 0.0, 'bayar' => 0.0];
+    $tungAda = !empty($d['total']['tung_tersedia']);
+    $nPunyaAgunan = 0; $nDebTampil = 0;
+
+    foreach (($d['rows'] ?? []) as $x) {
+        $rowBase = [
+            'nama'      => trim((string)($x['nama'] ?? '')),
+            'norek'     => trim((string)($x['norek'] ?? '')),
+            'cif'       => (string)($x['cif'] ?? ''),
+            'ao'        => (string)($x['ao'] ?? ''),
+            'alamat'    => trim((string)($x['alamat'] ?? '')),
+            'plafon'    => (float)($x['plafon_raw'] ?? 0),
+            'bakidebet' => (float)($x['bakidebet_raw'] ?? 0),
+            'kolek'     => $x['kolek'] ?? null,
+            'hari'      => $x['hari'] ?? null,
+            'tung_pkk'  => $x['tung_pkk_raw'] ?? null,            
+            'tung_bg'   => $x['tung_bg_raw'] ?? null,
+            'tagihan'   => (float)($x['tagihan_raw'] ?? 0),
+            'bayar'     => (float)($x['bayar_raw'] ?? 0),
+            'pinjam'    => (string)($x['pinjam_raw'] ?? ''),
+            'tempo'     => (string)($x['tempo'] ?? ''),
+            // kolom tambahan khusus Excel (dari mon_debitur): null = kolom database belum ada / belum terisi
+            'tgl_byr'     => (string)($x['tgl_byr_raw'] ?? ''),
+            'nom_byr'     => $x['nom_byr_raw'] ?? null,
+            'kon_tungpok' => $x['kon_tungpok_raw'] ?? null,
+            'kon_tungbu'  => $x['kon_tungbu_raw'] ?? null,
+            'denda'       => $x['denda_raw'] ?? null,
+        ];
+
+        if ($kata) {
+            $tumpukan = mb_strtolower($rowBase['nama'] . ' ' . $rowBase['norek'] . ' ' . $rowBase['cif'] . ' ' . $rowBase['alamat'] . ' ' . $rowBase['ao']);
+            foreach ($kata as $k) if (mb_strpos($tumpukan, $k) === false) continue 2;
+        }
+
+        $nDebTampil++;
+        // Jumlah total ringkasan bawah dihitung berdasarkan nasabah unik
+        foreach ($sum as $k => $_) $sum[$k] += $rowBase[$k];
+
+        // 3. LOGIC FLAT UN-NESTING: Duplikasi baris secara dinamis ke bawah berdasarkan list array agunan
+        /*$norekCheck = $rowBase['norek'];
+        $listAgunan = $agunanByNorek[$norekCheck] ?? [];*/
+        // Taktik Jitu: Bersihkan juga norek nasabah dasar sebelum dicocokkan silang ke data map agunan
+        $norekCheck = preg_replace('/[^0-9A-Za-z]/', '', $rowBase['norek']);
+        $listAgunan = $agunanByNorek[$norekCheck] ?? [];
+
+        if (!empty($listAgunan)) {
+            $nPunyaAgunan++;
+            foreach ($listAgunan as $agData) {
+                // Baris diduplikasi ke bawah, menggabungkan data nasabah dengan data agunannya
+                $rows[] = array_merge($rowBase, $agData);
+            }
+        } else {
+            // Jika nasabah tidak punya agunan sama sekali, berikan isi kolom kosong standar
+            $emptyAgunan = [
+                'kd_agunan' => '–', 'js_agunan' => '–', 'pemilik' => '–', 'js_ikat' => '–',
+                'n_bank' => null, 'n_ht' => null, 'n_njop' => null, 'tgl_ikat' => '–', 'alm_agun' => '–'
+            ];
+            $rows[] = array_merge($rowBase, $emptyAgunan);
+        }
+    }
+    
+    if (!$tungAda) unset($sum['tung_pkk'], $sum['tung_bg']);          
+    $terpotong = !empty($d['terpotong']);
+
+    $lblKolek = ['' => 'Semua', 'npl' => 'NPL (kolek 3-5)', '1' => 'Kolek 1 (Lancar)', '2' => 'Kolek 2 (DPK)', '3' => 'Kolek 3 (Kurang Lancar)', '4' => 'Kolek 4 (Diragukan)', '5' => 'Kolek 5 (Macet)'];
+    $lblAging = ['' => 'Semua', '0' => 'Lancar (0 hari)', '1' => '1-30 hari', '2' => '31-60 hari', '3' => '61-90 hari', '4' => 'Lebih dari 90 hari'];
+    
+    $namaAo = 'Semua AO';
+    $aoPilih = (string)($d['sel']['ao'] ?? '');
+    if ($aoPilih !== '') {
+        $namaAo = $aoPilih;
+        foreach (($d['aos'] ?? []) as $a) if ((string)($a['v'] ?? '') === $aoPilih) { $namaAo = (string)$a['l']; break; }
+    }
+    $posisi = preg_match('/^(\d{4})-(\d{2})-(\d{2})/', (string)($d['sel']['tgl'] ?? ''), $m) ? "$m[3]/$m[2]/$m[1]" : '–';
+
+    return [
+        'berkas' => 'daftar_debitur',
+        'judul'  => 'Daftar Debitur & Rincian Agunan',
+        'meta'   => [
+            'Posisi data: ' . $posisi . '   |   AO: ' . $namaAo . '   |   Kolek: ' . $lblKolek[$kolek] . '   |   Hari tunggak: ' . $lblAging[$aging] . ($cari !== '' ? '   |   Pencarian: ' . $cari : ''),
+            'Jumlah: ' . rp_teks($d['total']['n'] ?? count($d['rows'] ?? [])) . ' debitur terpilih   |   Plafon: Rp ' . rp_teks($sum['plafon']) . '   |   Baki debet: Rp ' . rp_teks($sum['bakidebet']),
+            'Dicetak: ' . date('d/m/Y H:i') . ' oleh ' . (string)((auth_user() ?? [])['nama'] ?? '-'),
+        ],
+        'kolom'  => [
+            ['h' => 'No',             't' => 'no',    'w' => 4],
+            ['h' => 'Nama debitur',   'k' => 'nama',  'w' => 20],
+            ['h' => 'No. rekening',   'k' => 'norek', 'w' => 13],
+            ['h' => 'CIF',            'k' => 'cif',   'w' => 12, 'xlsx' => true],                  
+            ['h' => 'AO',             'k' => 'ao',    'w' => 11],
+            ['h' => 'Alamat Debitur', 'k' => 'alamat','w' => 22],
+            
+            // --- DETIL RINCIAN DAFTAR KOLOM AGUNAN BARU (Kunci Mapping Sudah Diperbaiki Total) ---
+            ['h' => 'Kode Agunan',    'k' => 'kd_agunan', 'w' => 12],
+            ['h' => 'Jenis Agunan',   'k' => 'js_agunan', 'w' => 15],
+            ['h' => 'Pemilik Agunan', 'k' => 'pemilik',   'w' => 18],
+            ['h' => 'Jenis Ikat',     'k' => 'js_ikat',   'w' => 12],
+            ['h' => 'Nilai Bank (Rp)','k' => 'n_bank',    't' => 'rp', 'w' => 14],
+            ['h' => 'Nilai HT (Rp)',  'k' => 'n_ht',      't' => 'rp', 'w' => 14],
+            ['h' => 'Nilai NJOP (Rp)','k' => 'n_njop',    't' => 'rp', 'w' => 14],
+            ['h' => 'Tgl Pengikatan', 'k' => 'tgl_ikat',  'w' => 13],
+            ['h' => 'Alamat Agunan',  'k' => 'alm_agun',  'w' => 25],
+            // ----------------------------------------------
+
+            ['h' => 'Plafon (Rp)',    'k' => 'plafon',    't' => 'rp', 'w' => 12],
+            ['h' => 'Baki debet (Rp)','k' => 'bakidebet', 't' => 'rp', 'w' => 12],
+            ['h' => 'Kolek',          'k' => 'kolek', 't' => 'int', 'w' => 5],
+            ['h' => 'Hari tunggak',   'k' => 'hari',  't' => 'int', 'w' => 7],
+            ['h' => 'Total tunggakan pokok (Rp)', 'k' => 'tung_pkk', 't' => 'rp', 'w' => 11],
+            ['h' => 'Total tunggakan bunga (Rp)', 'k' => 'tung_bg',  't' => 'rp', 'w' => 11],
+            ['h' => 'Tagihan bln ini (Rp)', 'k' => 'tagihan', 't' => 'rp', 'w' => 11],
+            ['h' => 'Bayar bln ini (Rp)',   'k' => 'bayar',   't' => 'rp', 'w' => 11],
+            ['h' => 'Tgl bayar terakhir',          'k' => 'tgl_byr',     't' => 'date', 'w' => 11, 'xlsx' => true],
+            ['h' => 'Nominal bayar terakhir (Rp)', 'k' => 'nom_byr',     't' => 'rp',   'w' => 13, 'xlsx' => true],
+            ['h' => 'tunggakan kontraktual pokok (Rp)', 'k' => 'kon_tungpok', 't' => 'rp', 'w' => 13, 'xlsx' => true],
+            ['h' => 'tunggakan kontraktual bunga (Rp)', 'k' => 'kon_tungbu',  't' => 'rp', 'w' => 13, 'xlsx' => true],
+            ['h' => 'Denda (Rp)',                  'k' => 'denda',       't' => 'rp',   'w' => 11, 'xlsx' => true],
+            ['h' => 'Tgl pinjam',     'k' => 'pinjam','t' => 'date', 'w' => 9],
+            ['h' => 'Jatuh tempo',    'k' => 'tempo', 'w' => 9],
+        ],
+        'rows'    => $rows,
+        'total'   => $terpotong ? null : $sum,
+        'catatan' => array_values(array_filter([$terpotong ? 'Daftar dibatasi ' . ($d['batas'] ?? '20.000') . ' baris pertama. Persempit filter untuk melihat seluruhnya.' : null,
+!$tungAda ? 'Total tunggakan belum tersedia untuk posisi ini.' : null,
+'Urutan: hari tunggak terbanyak. Agunan dijabarkan satu baris per item secara detail.',
+empty($d['tambahan_tersedia']) ? 'Kolom bayar terakhir, konversi tunggakan, dan denda belum tersedia (kolom database belum ditambahkan atau belum terisi).' : null,
+$catAgunan,
+($catAgunan === null && $nDebTampil > 0) ? $nPunyaAgunan . ' dari ' . $nDebTampil . ' debitur memiliki data agunan; sisanya belum ada data agunan (kolom agunan diisi –).' : null,
+])),
+];
+}
 
 // ---------------------------------------------------------------------------------------------
 // LAPORAN: ketepatan bayar (tepat waktu / terlambat / sebagian / tidak bayar per bulan, dan pola langganan bermasalah)
