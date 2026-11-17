@@ -75,6 +75,7 @@ try {
             'tung_awal_pkk' => $x['tung_awal_pkk'], 'tung_awal_bg' => $x['tung_awal_bg'], 'tung_sisa_pkk' => $x['tung_sisa_pkk'], 'tung_sisa_bg' => $x['tung_sisa_bg'],
             'grup' => (($x['grup'] ?? 'rentang') === 'sebelumnya') ? 'Sebelumnya' : 'Rentang ini', 'lunas' => !empty($x['lunas']) ? 'LUNAS' : '',
             'byr_r_pkk' => (float)($x['byr_rentang_pkk'] ?? 0), 'byr_r_bg' => (float)($x['byr_rentang_bg'] ?? 0),
+            'tgl_byr' => (!empty($x['tgl_byr']) && ((float)$x['byr_pkk'] + (float)$x['byr_bg']) > 0) ? tg_tgl($x['tgl_byr']) : '',   // terisi hanya bila "Sudah bayar" (pokok + bunga) ada nominalnya
             'kunjungan' => $kjTeks,
             'kj_n' => $kv ? $kv['n'] : 0, 'kj_terakhir' => $kv ? tg_tgl($kv['terakhir']) : '', 'kj_komit' => ($kv && !empty($kv['komit'])) ? tg_tgl($kv['komit']) : '',
             'kj_ket' => $kv ? (string)$kv['ket'] : '',
@@ -156,6 +157,7 @@ try {
             ['h' => 'Kewajiban bln ini pokok / bunga', 'k' => 't_kw',     'w' => 11],
             ['h' => 'Sudah bayar pokok / bunga',       'k' => 't_byr',    'w' => 10],
             ['h' => 'Bayar di rentang pokok / bunga',  'k' => 't_byr_r',  'w' => 10],
+            ['h' => 'Tgl bayar',                       'k' => 'tgl_byr',  'w' => 8],
             ['h' => 'Kurang kewajiban pokok / bunga',  'k' => 't_kurang', 'w' => 11],
             ['h' => 'Tunggakan awal pokok / bunga',    'k' => 't_awal',   'w' => 12],
             ['h' => 'Sisa tunggakan pokok / bunga',    'k' => 't_sisa',   'w' => 12],
@@ -182,6 +184,7 @@ try {
             ['h' => 'Sudah bayar bunga (Rp)',       'k' => 'byr_bg',  't' => 'rp', 'w' => 15],
             ['h' => 'Bayar di rentang pokok (Rp)',  'k' => 'byr_r_pkk', 't' => 'rp', 'w' => 16],
             ['h' => 'Bayar di rentang bunga (Rp)',  'k' => 'byr_r_bg',  't' => 'rp', 'w' => 16],
+            ['h' => 'Tanggal bayar',                'k' => 'tgl_byr',   'w' => 13],
             ['h' => 'Kurang kewajiban pokok (Rp)',  'k' => 'kurang_pkk', 't' => 'rp', 'w' => 16],
             ['h' => 'Kurang kewajiban bunga (Rp)',  'k' => 'kurang_bg',  't' => 'rp', 'w' => 16],
             ['h' => 'Tunggakan awal pokok (Rp)',    'k' => 'tung_awal_pkk', 't' => 'rp', 'w' => 16],

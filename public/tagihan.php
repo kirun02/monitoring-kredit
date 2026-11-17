@@ -41,6 +41,7 @@ page_head('Tagihan AO', 'tagihan');
     <div class="bg" style="margin-left:auto">
         <a class="bg-btn bg-prev" id="lihatPdf" href="#" target="_blank" rel="noopener" aria-disabled="true" title="Lihat PDF di tab baru"><svg class="ic" aria-hidden="true"><use href="assets/ikon.svg#i-cari"/></svg>Preview</a>
         <a class="bg-btn bg-xls" id="unduhXlsx" href="#" aria-disabled="true" title="Unduh Excel"><svg class="ic" aria-hidden="true"><use href="assets/ikon.svg#i-xls"/></svg>Excel</a>
+        <a class="bg-btn bg-xls" id="unduhXlsx2" href="#" aria-disabled="true" title="Unduh Excel versi 2 (lembar Ringkasan + Rincian)"><svg class="ic" aria-hidden="true"><use href="assets/ikon.svg#i-xls"/></svg>Excel v2</a>
         <a class="bg-btn bg-pdf" id="unduhPdf" href="#" aria-disabled="true" title="Unduh PDF"><svg class="ic" aria-hidden="true"><use href="assets/ikon.svg#i-pdf"/></svg>PDF</a>
     </div>
 </form>
@@ -148,10 +149,22 @@ page_head('Tagihan AO', 'tagihan');
             return q;
         }
 
+        // tombol cetak (Preview, Excel, Excel v2, PDF) memakai isian formulir SAAT DIKLIK, bukan hasil Tampilkan yang terakhir,
+        // supaya tanggal yang baru diketik ikut terbawa walau Tampilkan belum diklik
+        ['lihatPdf', 'unduhXlsx', 'unduhXlsx2', 'unduhPdf'].forEach(function (id) {
+            $$(id).addEventListener('click', function () {
+                if (this.getAttribute('aria-disabled') === 'true') return;
+                var u = new URL(this.href, location.href);
+                ['awal', 'akhir', 'urut', 'ao'].forEach(function (k) { u.searchParams.delete(k); });
+                query().forEach(function (v, k) { u.searchParams.set(k, v); });
+                this.href = u.toString();
+            });
+        });
+
         function muat() {
             var ini = ++seq;
             msg(true, ''); btn.disabled = true; btn.textContent = 'Memuat…';
-            atur($$('lihatPdf'), ''); atur($$('unduhXlsx'), ''); atur($$('unduhPdf'), '');
+            atur($$('lihatPdf'), ''); atur($$('unduhXlsx'), ''); atur($$('unduhXlsx2'), ''); atur($$('unduhPdf'), '');
             fetch('api/api_tagihan.php?' + query().toString(), { credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
                 .then(function(r) {
                     if (r.status === 401) { location.href = 'login.php'; throw new Error(401); }
@@ -202,6 +215,7 @@ page_head('Tagihan AO', 'tagihan');
             var u = 'api/export_tagihan.php?' + p.toString();
             atur($$('lihatPdf'), u + '&format=pdf');
             atur($$('unduhXlsx'), u + '&format=xlsx');
+            atur($$('unduhXlsx2'), 'api/export_tagihan_v2.php?' + p.toString());
             atur($$('unduhPdf'), u + '&format=pdf&unduh=1');
         }
 
