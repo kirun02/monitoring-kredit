@@ -39,6 +39,7 @@ page_head('Debitur', 'debitur');
     <div class="bg" style="margin-left:auto">
         <a class="bg-btn bg-prev" id="lihatPdf" href="#" target="_blank" rel="noopener" aria-disabled="true" title="Lihat PDF di tab baru"><svg class="ic" aria-hidden="true"><use href="assets/ikon.svg#i-cari"/></svg>Preview</a>
         <a class="bg-btn bg-xls" id="unduhXlsx" href="#" aria-disabled="true" title="Unduh Excel"><svg class="ic" aria-hidden="true"><use href="assets/ikon.svg#i-xls"/></svg>Excel</a>
+        <a class="bg-btn bg-xls" id="unduhXlsxV2" href="#" aria-disabled="true" title="Unduh Excel versi 2: aging hari tunggak bulan berjalan dibanding akhir bulan lalu"><svg class="ic" aria-hidden="true"><use href="assets/ikon.svg#i-xls"/></svg>Excel (aging tunggakan)</a>
         <a class="bg-btn bg-pdf" id="unduhPdf" href="#" aria-disabled="true" title="Unduh PDF"><svg class="ic" aria-hidden="true"><use href="assets/ikon.svg#i-pdf"/></svg>PDF</a>
     </div>
 </div>
@@ -65,7 +66,7 @@ page_head('Debitur', 'debitur');
             </thead>
         </table>
     </div>
-    <div class="muted" style="margin-top:8px">Semua angka dalam Rupiah. Total tunggakan ditampilkan terpisah pokok dan bunga, dan kosong (–) untuk posisi yang diupload sebelum kolom itu ada. Urutan awal: hari tunggak terbanyak. Kotak Cari bisa mencari nama, norek, CIF, atau alamat. Tombol Preview, Excel, dan PDF mengikuti filter di atas dan isi kotak Cari (nama, norek, CIF, alamat, atau AO), dengan urutan hari tunggak terbanyak.</div>
+    <div class="muted" style="margin-top:8px">Semua angka dalam Rupiah. Total tunggakan ditampilkan terpisah pokok dan bunga, dan kosong (–) untuk posisi yang diupload sebelum kolom itu ada. Urutan awal: hari tunggak terbanyak. Kotak Cari bisa mencari nama, norek, CIF, atau alamat. Tombol Preview, Excel, dan PDF mengikuti filter di atas dan isi kotak Cari (nama, norek, CIF, alamat, atau AO), dengan urutan hari tunggak terbanyak. Tombol Excel v2 berisi ringkasan aging hari tunggak bulan berjalan dibanding posisi akhir bulan lalu (ikut tanggal posisi dan AO saja).</div>
 </div>
 
 <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
@@ -205,6 +206,7 @@ page_head('Debitur', 'debitur');
         var sel = null;
         var tbPrev = document.getElementById('lihatPdf'),
             tbXls  = document.getElementById('unduhXlsx'),
+            tbXls2 = document.getElementById('unduhXlsxV2'),
             tbPdf  = document.getElementById('unduhPdf');
 
         function atur(el, href) {
@@ -213,7 +215,7 @@ page_head('Debitur', 'debitur');
         }
 
         function aturUnduh() {
-            if (!sel) { atur(tbPrev, ''); atur(tbXls, ''); atur(tbPdf, ''); return; }
+            if (!sel) { atur(tbPrev, ''); atur(tbXls, ''); atur(tbXls2, ''); atur(tbPdf, ''); return; }
             var p = new URLSearchParams({ laporan: 'debitur' });
             if (sel.tgl) p.set('tgl', sel.tgl);
             if (sel.ao) p.set('ao', sel.ao);
@@ -225,6 +227,11 @@ page_head('Debitur', 'debitur');
             atur(tbPrev, u + '&format=pdf');
             atur(tbXls, u + '&format=xlsx');
             atur(tbPdf, u + '&format=pdf&unduh=1');
+            // Excel v2: aging hari tunggak seluruh debitur (ikut tanggal posisi dan AO saja; kolek, hari tunggak, dan kotak Cari tidak berlaku)
+            var p2 = new URLSearchParams();
+            if (sel.tgl) p2.set('tgl', sel.tgl);
+            if (sel.ao) p2.set('ao', sel.ao);
+            atur(tbXls2, 'api/export_debitur_v2.php?' + p2.toString());
         }
         table.on('search.dt', aturUnduh);
 

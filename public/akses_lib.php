@@ -32,6 +32,8 @@ const AKTIF_KE_KODE = [
     'lappromosi'    => 'web_lap_promosi',
     'telepon'       => 'web_telepon',
     'laptelepon'    => 'web_lap_telepon',
+    'target'        => 'web_target_ao',
+    'laptarget'     => 'web_lap_target',
 ];
 
 function akses_kode_aktif(string $active): string

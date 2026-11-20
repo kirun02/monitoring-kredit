@@ -1,7 +1,7 @@
 <?php
 /**
  * Excel "Versi 2" untuk Tagihan AO: lembar "Ringkasan" (tabel uraian butir 1-4) dan satu lembar rincian per butir
- * (Rincian 1 Kewajiban, Rincian 2 Tunggakan, Rincian 3 NPL, Rincian 4 Pelunasan; satu baris per debitur).
+ * (Rincian 1-2 Tagihan, Rincian 3 NPL, Rincian 4 Pelunasan, Rincian 5 Realisasi; satu baris per debitur).
  * Berdiri sendiri: export_tagihan.php yang lama TIDAK diubah. Letak: folder api/.
  *
  *   GET export_tagihan_v2.php?awal=YYYY-MM-DD&akhir=YYYY-MM-DD&ao=&urut=tgl|ao|hari
@@ -128,15 +128,16 @@ try {
         $npl[$k]['b'] += (float)($x['tung_sisa_bg'] ?? 0);
     }
 
+    $RL = $d['realisasi'] ?? ['n' => 0, 'plafon' => 0.0, 'baki' => 0.0, 'rows' => [], 'gagal' => true];
     $tt = $tgOk ? null : '–';                                // tunggakan belum termuat di posisi terakhir: tampilkan "–"
     $ta = $tgAwal ? null : '–';
     // [label, debitur, pokok, bunga, tebal?, indent?]  — null = baris kosong pemisah
     $baris = [
-        ['1. Total kewajiban bulan ini (tgl pinjam ' . $rentangTxt . ')', (int)$R['deb'],      (float)$R['kw_pkk'],  (float)$R['kw_bg'],  true,  false, 'Rincian 1 Kewajiban'],
+        ['1. Total kewajiban bulan ini (tgl pinjam ' . $rentangTxt . ')', (int)$R['deb'],      (float)$R['kw_pkk'],  (float)$R['kw_bg'],  true,  false, 'Rincian 1-2 Tagihan'],
         ['Total Pembayaran (tgl pinjam ' . $rentangTxt . ')',             (int)$R['deb_byr'],  (float)$R['byr_pkk'], (float)$R['byr_bg'], false, false],
         ['Sisa Kewajiban tgl ' . $rentangTxt,                             (int)$R['deb_sisa'], (float)$R['sisa_pkk'], (float)$R['sisa_bg'], false, false],
         null,
-        ['2. Tunggakan bulan sebelumnya',                                 (int)$S['deb'],      $tgAwal ? (float)$S['tung_pkk'] : $ta, $tgAwal ? (float)$S['tung_bg'] : $ta, true, false, 'Rincian 2 Tunggakan'],
+        ['2. Tunggakan bulan sebelumnya',                                 (int)$S['deb'],      $tgAwal ? (float)$S['tung_pkk'] : $ta, $tgAwal ? (float)$S['tung_bg'] : $ta, true, false, 'Rincian 1-2 Tagihan'],
         ['Total Pembayaran',                                              (int)$S['deb_byr'],  (float)$S['byr_pkk'], (float)$S['byr_bg'], false, false],
         ['Sisa Kewajiban',                                                (int)$S['deb_sisa'], $tgOk ? (float)$S['sisa_pkk'] : $tt, $tgOk ? (float)$S['sisa_bg'] : $tt, false, false],
         null,
@@ -144,6 +145,8 @@ try {
         ['Sudah NPL (lebih dari ' . $batas . ' hari)',                    $npl['sdh']['n'],    $tgOk ? $npl['sdh']['p'] : $tt, $tgOk ? $npl['sdh']['b'] : $tt, false, true],
         null,
         ['4. Pelunasan dalam rentang waktu',                              (int)$rk['lunas_keluar'], (float)$rk['lunas_baki'], '–', true, false, 'Rincian 4 Pelunasan'],
+        null,
+        ['5. Realisasi kredit baru (' . date('d/m/Y', strtotime($d['sel']['awal'])) . ' s/d ' . date('d/m/Y', strtotime($d['sel']['akhir'])) . ')', empty($RL['gagal']) ? (int)$RL['n'] : '–', empty($RL['gagal']) ? (float)$RL['plafon'] : '–', '–', true, false, 'Rincian 5 Realisasi'],
     ];
     $i = $H + 1;
     foreach ($baris as $b) {
@@ -178,7 +181,10 @@ try {
         '• Tunggakan bulan sebelumnya = semua debitur (tanggal pinjam berapa pun) yang punya tunggakan (pokok atau bunga) di posisi awal bulan; pembayarannya = pembayaran sejak ' . ($d['posisi_pembanding'] ? 'posisi ' . $fmt($d['posisi_pembanding']) : 'awal bulan') . ' sampai posisi terakhir; sisa = sisa tunggakan di posisi terakhir.',
         '• NPL dihitung dari sisa tunggakan debitur yang masih ditagih, menurut hari tunggak di posisi ' . $fmt($d['posisi_akhir']) . '.',
         '• Pelunasan = rekening yang baki debetnya nol atau sudah tidak ada di nominatif terakhir; kolom Pokok berisi baki debet baseline.',
-        '• Daftar debitur tiap butir ada di lembar Rincian 1 sampai 4 (klik tulisan di kolom paling kanan); jumlah tiap lembar sama dengan angka butirnya di sini.',
+        '• Realisasi kredit baru = kredit yang dicairkan dalam rentang tanggal di atas (menurut tanggal pinjam, sampai data posisi terakhir); kolom Pokok berisi plafon. Ini kredit baru, bukan tagihan, jadi tidak ikut dihitung di butir 1 sampai 4.',
+        '• Sisa kewajiban di butir 1 ikut menghitung debitur yang tanggal angsurannya (hari tanggal pinjam) belum tiba, yaitu setelah tanggal data terakhir ' . $fmt($d['posisi_akhir']) . '. Mereka ditandai "Belum jatuh tempo" di lembar Rincian 1-2 Tagihan.',
+        '• Daftar debitur tiap butir ada di lembar Rincian (butir 1 dan 2 digabung di lembar Rincian 1-2 Tagihan; klik tulisan di kolom paling kanan). Jumlah tiap lembar sama dengan angka butirnya di sini.',
+        '• Tunggakan di laporan ini adalah tunggakan bulan-bulan SEBELUMNYA. Data nominatif mencatat total tunggakan = tunggakan bulan lalu + kewajiban bulan ini, jadi kewajiban bulan ini sudah dikurangkan. Debitur lancar (kolek 1) yang hanya punya kewajiban bulan ini tidak dihitung punya tunggakan.',
         '• Butir 3 bukan tambahan tagihan: debitur yang sama bisa muncul juga di butir 1 atau 2, hanya dilihat dari sisi hari tunggaknya. Butir 4 (lunas) tidak dihitung lagi di butir 1–3.',
     ];
     if (!$tgOk)  $cat[] = '• Data tunggakan belum ada di posisi terakhir, jadi sisa tunggakan dan nilai NPL ditampilkan "–".';
@@ -235,7 +241,7 @@ try {
     $kolek = function (array $x) { return $x['kolek'] === null ? '' : (int)$x['kolek']; };
     $xnung = function (array $x) { return $x['xnunggak'] === null ? '' : (int)$x['xnunggak']; };
 
-    // pembuat lembar umum. kolom: t=judul, w=lebar, j=jenis (teks|str|tengah|angka|tgl), sum=true (jumlah), rumus=[kolA,kolB] (A+B)
+    // pembuat lembar umum. kolom: t=judul, w=lebar, j=jenis (teks|str|tengah|angka|tgl), sum=true (jumlah), rumus=[kolA,kolB] (A+B) atau [kolA,kolB,'-'] (MAX(0, A-B))
     $buatLembar = function (string $nama, string $judul, array $kolom, array $data, array $catatan, array $warna = [], int $ekstra = 0) use ($ss, $kepala, $garis, $subJudul) {
         $ws = $ss->createSheet();
         $ws->setTitle($nama);
@@ -251,16 +257,17 @@ try {
             $ws->getColumnDimension($col)->setWidth($c['w']);
         }
         $ws->getStyle("A$HR:$last$HR")->applyFromArray($kepala);
-        $ws->getRowDimension($HR)->setRowHeight(32);
+        $ws->getRowDimension($HR)->setRowHeight(48);
 
         $i = $HR + 1; $mulai = $i;
         foreach ($data as $baris) {
             foreach ($kolom as $k => $c) {
                 $col = Coordinate::stringFromColumnIndex($k + 1);
                 if (isset($c['rumus'])) {
-                    [$a, $b] = $c['rumus'];
+                    [$a, $b] = $c['rumus']; $op = $c['rumus'][2] ?? '+';
                     if (($baris[$a] ?? null) !== null && $baris[$a] !== '' || ($baris[$b] ?? null) !== null && $baris[$b] !== '') {
-                        $ws->setCellValue($col . $i, '=' . Coordinate::stringFromColumnIndex($a + 1) . $i . '+' . Coordinate::stringFromColumnIndex($b + 1) . $i);
+                        $fa = Coordinate::stringFromColumnIndex($a + 1) . $i; $fb = Coordinate::stringFromColumnIndex($b + 1) . $i;
+                        $ws->setCellValue($col . $i, $op === '-' ? "=MAX(0,$fa-$fb)" : "=$fa+$fb");
                     }
                     continue;
                 }
@@ -330,77 +337,96 @@ try {
         return ['ws' => $ws, 'mulai' => $mulai, 'akhir' => $akhirData, 'jml' => $j];
     };
 
-    // ---------------------------------------------------------------- Rincian 1: kewajiban bulan ini (tgl pinjam dalam rentang)
-    // Kewajiban = kw_bln_pkk / kw_bln_bg; Pembayaran = byr_blnpkk / byr_blnbg (posisi terakhir)
-    $kol1 = array_merge($kolDasar, [
-        ['t' => 'Kolek',                         'w' => 7,  'j' => 'tengah'],   // 6
-        ['t' => "Nunggak\n(x)",                  'w' => 9,  'j' => 'tengah'],   // 7
-        ['t' => "Kewajiban bulan ini\nPokok",    'w' => 15, 'j' => 'angka', 'sum' => true],   // 8
-        ['t' => "Kewajiban bulan ini\nBunga",    'w' => 15, 'j' => 'angka', 'sum' => true],   // 9
-        ['t' => "Kewajiban bulan ini\nTotal",    'w' => 15, 'j' => 'angka', 'sum' => true, 'rumus' => [8, 9]],   // 10
-        ['t' => "Sudah dibayar\nPokok",          'w' => 15, 'j' => 'angka', 'sum' => true],   // 11
-        ['t' => "Sudah dibayar\nBunga",          'w' => 15, 'j' => 'angka', 'sum' => true],   // 12
-        ['t' => "Sudah dibayar\nTotal",          'w' => 15, 'j' => 'angka', 'sum' => true, 'rumus' => [11, 12]],  // 13
-        ['t' => "Sisa kewajiban\n(kurang bayar)", 'w' => 15, 'j' => 'angka', 'sum' => true],  // 14
-        ['t' => "Tanggal bayar\nterakhir",       'w' => 12, 'j' => 'tgl'],      // 15
+    // ---------------------------------------------------------------- Rincian 1-2: kewajiban bulan ini (butir 1) dan tunggakan bulan sebelumnya (butir 2) dalam satu lembar
+    // Satu debitur satu baris. Kolom kewajiban hanya terisi untuk butir 1, kolom tunggakan hanya untuk butir 2, jadi JUMLAH tiap kolom = angka butirnya di Ringkasan.
+    // Kewajiban = kewajiban bulan ini; Pembayaran butir 1 = pembayaran bulan ini (posisi terakhir); Tunggakan = tunggakan pokok dan bunga (awal bulan dan sisa)
+    $kol12 = array_merge($kolDasar, [
+        ['t' => 'Kolek',                              'w' => 7,  'j' => 'tengah'],   // 7
+        ['t' => "Nunggak\n(x)",                       'w' => 9,  'j' => 'tengah'],   // 8
+        ['t' => "Tunggakan\nbulan lalu\n(Pokok+Bunga)",  'w' => 16, 'j' => 'angka', 'sum' => true],   // 8  (I)
+        ['t' => "Kewajiban\nbulan ini\n(Pokok+Bunga)",   'w' => 16, 'j' => 'angka', 'sum' => true],   // 9  (J)
+        ['t' => "Tunggakan +\nKewajiban\nTotal",         'w' => 16, 'j' => 'angka', 'sum' => true, 'rumus' => [8, 9]],   // 10 (K) = I + J
+        ['t' => "Sudah dibayar\n(bln ini)", 'w' => 16, 'j' => 'angka', 'sum' => true],   // 12
+        ['t' => "Sisa tunggakan\nTotal",              'w' => 15, 'j' => 'angka', 'sum' => true, 'rumus' => [10, 11, '-']],   // 12 = Tunggakan Total - Sudah dibayar (minimal 0)
+        ['t' => 'Status',                             'w' => 26, 'j' => 'teks', 'wrap' => true],   // 14
+        ['t' => "Tanggal bayar\nterakhir",            'w' => 12, 'j' => 'tgl'],      // 15
     ], $kolAkt);
-    $dt1 = []; $no = 0;
-    foreach ($rows as $x) {
-        if (!empty($x['lunas']) || ($x['grup'] ?? '') === 'sebelumnya') continue;
-        $kwP = (float)$x['kw_pkk']; $kwB = (float)$x['kw_bg'];
-        if ($kwP + $kwB <= 0) continue;                          // sama dengan syarat butir 1 di Ringkasan
-        $byP = (float)$x['byr_pkk']; $byB = (float)$x['byr_bg'];
-        $sP = max(0.0, $kwP - $byP); $sB = max(0.0, $kwB - $byB);
-        if ($sP + $sB <= 0.5) { $sP = 0.0; $sB = 0.0; }
-        $no++;
-        $dt1[] = array_merge($dasar($x, $no), [$kolek($x), $xnung($x), $kwP, $kwB, null, $byP, $byB, null, $sP + $sB, (string)($x['tgl_byr'] ?? '')], $aktivitas($x));
-    }
-    $buatLembar('Rincian 1 Kewajiban', 'Rincian 1 – Kewajiban bulan ini (tgl pinjam ' . $rentangTxt . ')', $kol1, $dt1, [
-        'Keterangan:',
-        '• Lembar ini = butir 1 di Ringkasan. Isinya debitur dengan tanggal pinjam ' . $rentangTxt . ' yang punya kewajiban pokok/bunga bulan ini, termasuk yang sudah membayar penuh.',
-        '• Kewajiban bulan ini = pokok dan bunga yang harus dibayar bulan ini menurut data posisi ' . $fmt($d['posisi_baseline']) . '. Sudah dibayar = pokok dan bunga yang sudah masuk bulan ini sampai posisi ' . $fmt($d['posisi_akhir']) . '.',
-        '• Sisa kewajiban = kewajiban dikurangi yang sudah dibayar, dihitung per debitur (kelebihan bayar satu debitur tidak mengurangi debitur lain). Nol berarti sudah beres bulan ini.',
-        '• Debitur yang sudah lunas tidak ada di lembar ini, lihat Rincian 4 Pelunasan.',
-    ]);
-
-    // ---------------------------------------------------------------- Rincian 2: tunggakan bulan sebelumnya (tgl pinjam sebelum rentang)
-    // Tunggakan = ttung_pkk / ttung_bg; Pembayaran = byr_blnpkk / byr_blnbg
-    $kol2 = array_merge($kolDasar, [
-        ['t' => 'Kolek',                          'w' => 7,  'j' => 'tengah'],   // 6
-        ['t' => "Nunggak\n(x)",                   'w' => 9,  'j' => 'tengah'],   // 7
-        ['t' => "Hari\ntunggak",                  'w' => 8,  'j' => 'tengah'],   // 8
-        ['t' => "Tunggakan \nPokok",          'w' => 15, 'j' => 'angka', 'sum' => true],   // 9
-        ['t' => "Tunggakan \nBunga",          'w' => 15, 'j' => 'angka', 'sum' => true],   // 10
-        ['t' => "Tunggakan \nTotal",          'w' => 15, 'j' => 'angka', 'sum' => true, 'rumus' => [9, 10]],   // 11
-        ['t' => "Dibayar dalam rentang\nPokok",   'w' => 15, 'j' => 'angka', 'sum' => true],   // 12
-        ['t' => "Dibayar dalam rentang\nBunga",   'w' => 15, 'j' => 'angka', 'sum' => true],   // 13
-        ['t' => "Dibayar dalam rentang\nTotal",   'w' => 15, 'j' => 'angka', 'sum' => true, 'rumus' => [12, 13]],  // 14
-        ['t' => "Sisa tunggakan\nPokok",          'w' => 15, 'j' => 'angka', 'sum' => true],   // 15
-        ['t' => "Sisa tunggakan\nBunga",          'w' => 15, 'j' => 'angka', 'sum' => true],   // 16
-        ['t' => "Sisa tunggakan\nTotal",          'w' => 15, 'j' => 'angka', 'sum' => true, 'rumus' => [15, 16]],  // 17
-        ['t' => "Tanggal bayar\nterakhir",        'w' => 12, 'j' => 'tgl'],      // 18
-    ], $kolAkt);
-    $dt2 = []; $no = 0;
+    $dt12 = []; $w12 = []; $no = 0; $n1 = 0; $n2 = 0;
+    $hariPos = (int)substr((string)$d['posisi_akhir'], 8, 2);   // tanggal nominatif terakhir
+    $hariBln = (int)date('t', strtotime($d['periode'] . '-01'));   // jumlah hari bulan ini (tgl pinjam 29-31 jatuh di akhir bulan bila bulannya lebih pendek)
     foreach ($rows as $x) {
         if (!empty($x['lunas'])) continue;
+        $kwP = (float)$x['kw_pkk']; $kwB = (float)$x['kw_bg'];
+        $in1 = ($x['grup'] ?? '') !== 'sebelumnya' && ($kwP + $kwB) > 0;                       // sama dengan syarat butir 1 di Ringkasan
         $taP = $nz($x['tung_awal_pkk'] ?? null); $taB = $nz($x['tung_awal_bg'] ?? null);
-        if ($tgAwal ? (($taP ?? 0.0) + ($taB ?? 0.0)) <= 0 : (int)$x['hari'] <= 0) continue;   // sama dengan syarat butir 2 di Ringkasan: punya tunggakan di baseline, tgl pinjam berapa pun
-        $sP = $nz($x['tung_sisa_pkk'] ?? null); $sB = $nz($x['tung_sisa_bg'] ?? null);
-        if ($sP !== null && $sB !== null && $sP + $sB <= 0.5) { $sP = 0.0; $sB = 0.0; }
+        $in2 = $tgAwal ? (($taP ?? 0.0) + ($taB ?? 0.0)) > 0 : (int)$x['hari'] > 0;            // sama dengan syarat butir 2 di Ringkasan
+        if (!$in1 && !$in2) continue;
+
+        $byP = (float)$x['byr_pkk']; $byB = (float)$x['byr_bg'];
+        $sKw = 0.0;
+        if ($in1) {
+            $sP = max(0.0, $kwP - $byP); $sB = max(0.0, $kwB - $byB);
+            $sKw = ($sP + $sB <= 0.5) ? 0.0 : $sP + $sB;
+        }
+        $tsP = $nz($x['tung_sisa_pkk'] ?? null); $tsB = $nz($x['tung_sisa_bg'] ?? null);
+        if ($tsP !== null && $tsB !== null && $tsP + $tsB <= 0.5) { $tsP = 0.0; $tsB = 0.0; }
+        $sisaTung = ($tsP ?? 0.0) + ($tsB ?? 0.0);
+
+        // Status: pembayaran bulan ini (pokok + bunga) dibandingkan dengan total tunggakan di baseline (yang sudah mencakup kewajiban bulan ini bila belum dibayar).
+        // Dibandingkan per TOTAL, jadi selisih pokok/bunga yang saling mengganti tidak dianggap Kurang bayar; angsuran yang dibayar lebih awal (tunggakan di baseline 0 tetapi ada pembayaran bulan ini) = Bayar lebih.
+        $bayarIni  = $byP + $byB;
+        $belumTempo = min((int)$x['tgl_jt'], $hariBln) > $hariPos;
+        if ($tgAwal) {
+            $tungAwalTot = ($taP ?? 0.0) + ($taB ?? 0.0);
+            $wajibTot    = $tungAwalTot;                              // yang harus dibayar = total tunggakan di baseline (sudah mencakup kewajiban bulan ini bila belum dibayar)
+            $selisihByr  = $bayarIni - $wajibTot;                    // dibandingkan TOTAL (pokok + bunga), bukan per komponen
+            $hanyaKwBlnIni = $in1 && $tungAwalTot <= ($kwP + $kwB) + 0.5;      // tunggakan di data hanya kewajiban bulan ini (tidak ada tunggakan lama)
+            if ($bayarIni > 0 && $selisihByr > 0.5)        $status = 'Bayar lebih';
+            elseif ($bayarIni > 0 && $selisihByr >= -0.5)  $status = 'Sudah bayar';
+            elseif ($bayarIni > 0)                         $status = 'Kurang bayar';
+            elseif ($wajibTot <= 0.5)                      $status = 'Tidak ada tunggakan';
+            else                                           $status = ($belumTempo && $hanyaKwBlnIni) ? 'Belum jatuh tempo' : 'Belum bayar';
+        } else {   // data tunggakan awal bulan tidak ada: pakai penilaian kewajiban bulan ini
+            $status = $in1 ? ($sKw <= 0 ? 'Sudah bayar' : ($belumTempo ? 'Belum jatuh tempo' : ($bayarIni > 0 ? 'Kurang bayar' : 'Belum bayar'))) : 'Menunggak';
+        }
+
+        // ttung di baseline sudah mencakup kewajiban bulan ini (lihat keterangan di bawah), jadi tunggakan "bulan lalu" = ttung dikurangi kewajiban (tidak kurang dari 0)
+        $kwTot    = $in1 ? $kwP + $kwB : null;
+        $taTot    = ($taP === null && $taB === null) ? null : ($taP ?? 0.0) + ($taB ?? 0.0);
+        $tungLama = $taTot === null ? null : ($in1 ? max(0.0, $taTot - ($kwP + $kwB)) : $taTot);
+
         $no++;
-        $dt2[] = array_merge($dasar($x, $no), [$kolek($x), $xnung($x), (int)$x['hari'], $taP, $taB, null,
-            (float)($x['byr_rentang_pkk'] ?? 0), (float)($x['byr_rentang_bg'] ?? 0), null, $sP, $sB, null, (string)($x['tgl_byr'] ?? '')], $aktivitas($x));
+        if ($in1) $n1++;
+        if ($in2) $n2++;
+        if ($status === 'Belum jatuh tempo') $w12[$no - 1] = 'F2F2F2';
+        $dt12[] = array_merge($dasar($x, $no), [
+            $kolek($x), $xnung($x),
+            $tungLama, $kwTot, null,                  // Tunggakan bulan lalu, Kewajiban bulan ini, Total = rumus (I+J)
+            $byP + $byB, null,                        // Sudah dibayar (pembayaran pokok + bunga bulan ini), Sisa tunggakan Total = rumus
+            $status, (string)($x['tgl_byr'] ?? ''),
+        ], $aktivitas($x));
     }
-    $cat2 = [
+    $cat12 = [
         'Keterangan:',
-        '• Lembar ini = butir 2 di Ringkasan. Isinya SEMUA debitur yang punya tunggakan (pokok atau bunga) di awal bulan dan belum lunas, berapa pun tanggal pinjamnya.',
-        '• Tunggakan awal = tunggakan pokok dan bunga menurut data posisi ' . $fmt($d['posisi_baseline']) . ' (awal bulan). Sisa tunggakan = tunggakan pokok dan bunga yang masih ada di posisi ' . $fmt($d['posisi_akhir']) . '.',
-        '• Dibayar dalam rentang = pembayaran bulan ini sampai posisi ' . $fmt($d['posisi_akhir']) . ' dikurangi pembayaran bulan ini sampai posisi ' . ($d['posisi_pembanding'] ? $fmt($d['posisi_pembanding']) : 'awal bulan') . ' (pembayaran sebelum rentang sudah masuk laporan minggu sebelumnya, jadi Tunggakan awal – Dibayar belum tentu sama dengan Sisa).',
-        '• Debitur dengan tanggal pinjam dalam rentang ' . $rentangTxt . ' bisa tampil di Rincian 1 dan di lembar ini (kewajiban bulan ini dan tunggakan lama adalah dua tagihan berbeda). Data pembayaran bulan ini hanya satu angka per debitur, jadi pembayaran di dua lembar itu jangan dijumlahkan.',
+        '• Lembar ini = butir 1 dan butir 2 di Ringkasan. Satu debitur satu baris; butir 1 dan 2 tidak dipisah karena angka tunggakan di data sudah mencakup kewajiban bulan ini.',
+        '• Tunggakan bulan lalu = total tunggakan di posisi awal bulan ' . $fmt($d['posisi_baseline']) . ' dikurangi kewajiban bulan ini (angka tunggakan di data sudah mencakup kewajiban bulan ini). Kewajiban bulan ini = angsuran pokok + bunga debitur yang tanggal pinjamnya ' . $rentangTxt . '. Tunggakan + Kewajiban Total = jumlah keduanya.',
+        '• Sudah dibayar (bln ini) = pembayaran pokok dan bunga bulan ini sampai posisi ' . $fmt($d['posisi_akhir']) . '. Sisa tunggakan Total = Tunggakan + Kewajiban Total dikurangi Sudah dibayar (tidak kurang dari 0).',
+        '• Tanggal bayar terakhir hanya terisi bila debitur sudah membayar bulan ini.',
+        '• Telepon dan Kunjungan = catatan aktivitas AO pada debitur tersebut.',
+        '• Status (pembayaran bulan ini dibandingkan dengan Tunggakan Total di baseline; pokok dan bunga dijumlah): Sudah bayar = pembayaran sama dengan tunggakan. Bayar lebih = pembayaran lebih besar dari tunggakan, termasuk angsuran yang sudah dibayar lebih awal (tunggakan 0 tetapi ada pembayaran bulan ini, berarti yang dibayar adalah angsuran bulan berikutnya). Kurang bayar = ada pembayaran tetapi masih kurang dari tunggakan. Belum bayar = belum ada pembayaran. Tidak ada tunggakan = tunggakan 0 dan belum ada pembayaran. Belum jatuh tempo (abu-abu) = tunggakan di data hanya kewajiban bulan ini, angsuran jatuh tiap bulan pada tanggal yang sama dengan tanggal pinjam, tanggal itu masih setelah tanggal data terakhir (' . $fmt($d['posisi_akhir']) . '), dan belum ada pembayaran.',
+        '• Debitur yang sudah lunas tidak ada di lembar ini, lihat Rincian 4 Pelunasan.',
     ];
-    if (!$tgOk)  $cat2[] = '• Total tunggakan belum termuat di posisi terakhir, jadi kolom Sisa tunggakan kosong.';
-    if (!$tgAwal) $cat2[] = '• Total tunggakan belum termuat di baseline, jadi kolom Tunggakan awal kosong dan daftar dinilai dari hari tunggak.';
-    $buatLembar('Rincian 2 Tunggakan', 'Rincian 2 – Tunggakan bulan sebelumnya', $kol2, $dt2, $cat2);
+    if (!$tgOk)   $cat12[] = '• Data tunggakan belum ada di posisi terakhir, jadi kolom Sisa tunggakan kosong.';
+    if (!$tgAwal) $cat12[] = '• Data tunggakan belum ada di awal bulan, jadi kolom Tunggakan kosong dan butir 2 dinilai dari hari tunggak.';
+    $L12 = $buatLembar('Rincian 1-2 Tagihan', 'Rincian 1 dan 2 – Total tunggakan dan pembayaran bulan ini', $kol12, $dt12, $cat12, $w12, 2);
+    // dua baris jumlah debitur per butir (angka rupiahnya sudah terpisah per kolom di baris JUMLAH)
+    $ws12 = $L12['ws']; $a12 = $L12['mulai']; $z12 = max($L12['akhir'], $L12['mulai']);
+    $rr = $L12['jml'] + 1;
+    foreach ([['Butir 1', $n1], ['Butir 2', $n2]] as [$nm, $jmlButir]) {
+        $ws12->setCellValue("B$rr", $nm . ': ' . $jmlButir . ' debitur');
+        $ws12->getStyle("A$rr:" . Coordinate::stringFromColumnIndex(count($kol12)) . "$rr")->getFont()->setBold(true);
+        $rr++;
+    }
 
     // ---------------------------------------------------------------- Rincian 3: NPL (berpotensi dan sudah)
     // Sisa tunggakan = ttung_pkk / ttung_bg posisi terakhir
@@ -432,7 +458,7 @@ try {
     $L3 = $buatLembar('Rincian 3 NPL', 'Rincian 3 – Berpotensi masuk NPL dan sudah NPL', $kol3, $dt3, [
         'Keterangan:',
         '• Lembar ini = butir 3 di Ringkasan. Berpotensi NPL = hari tunggak ' . ($batas - 29) . '–' . $batas . ' (kuning); Sudah NPL = lebih dari ' . $batas . ' hari (merah muda). Hari tunggak menurut posisi ' . $fmt($d['posisi_akhir']) . '.',
-        '• Lembar ini BUKAN tambahan tagihan: debitur yang sama juga bisa tampil di Rincian 1 atau Rincian 2. Di sini hanya dilihat dari sisi hari tunggaknya.',
+        '• Lembar ini BUKAN tambahan tagihan: debitur yang sama juga bisa tampil di lembar Rincian 1-2 Tagihan. Di sini hanya dilihat dari sisi hari tunggaknya.',
         '• Sisa tunggakan = tunggakan pokok dan bunga yang masih ada di posisi ' . $fmt($d['posisi_akhir']) . '.',
         $tgOk ? '' : '• Total tunggakan belum termuat di posisi terakhir, jadi kolom Sisa tunggakan kosong.',
     ], $w3, 2);
@@ -468,6 +494,29 @@ try {
         '• Lembar ini = butir 4 di Ringkasan. Isinya rekening yang sudah lunas: baki debetnya nol, atau sudah tidak ada lagi di nominatif posisi ' . $fmt($d['posisi_akhir']) . '.',
         '• Baki debet saat baseline = baki debet di nominatif posisi ' . $fmt($d['posisi_baseline']) . ' (angka ini yang tampil di kolom Pokok pada Ringkasan butir 4).',
         '• Debitur yang lunas tidak dihitung lagi di butir 1, 2, dan 3.',
+    ]);
+
+    // ---------------------------------------------------------------- Rincian 5: realisasi kredit baru
+    $kol5 = [
+        ['t' => 'No',                          'w' => 5,  'j' => 'tengah'],
+        ['t' => 'Nama debitur',                'w' => 26, 'j' => 'teks'],
+        ['t' => 'No. rekening',                'w' => 17, 'j' => 'str'],
+        ['t' => 'AO',                          'w' => 16, 'j' => 'teks'],
+        ['t' => 'Alamat',                      'w' => 34, 'j' => 'teks', 'wrap' => true],
+        ['t' => "Tanggal\npinjam",             'w' => 12, 'j' => 'tgl'],
+        ['t' => 'Plafon',                      'w' => 17, 'j' => 'angka', 'sum' => true],
+        ['t' => "Baki debet\nposisi terakhir", 'w' => 17, 'j' => 'angka', 'sum' => true],
+    ];
+    $dt5 = []; $no = 0;
+    foreach (($RL['rows'] ?? []) as $x) {
+        $no++;
+        $dt5[] = [$no, (string)$x['nama'], (string)$x['norek'], (string)$x['ao'], (string)$x['alamat'], (string)$x['tgl'], (float)$x['plafon'], (float)$x['baki']];
+    }
+    $buatLembar('Rincian 5 Realisasi', 'Rincian 5 – Realisasi kredit baru', $kol5, $dt5, [
+        'Keterangan:',
+        '• Lembar ini = butir 5 di Ringkasan. Isinya kredit yang tanggal pinjamnya ' . date('d/m/Y', strtotime($d['sel']['awal'])) . ' s/d ' . date('d/m/Y', strtotime($d['sel']['akhir'])) . ', menurut data posisi ' . $fmt($d['posisi_akhir']) . '.',
+        '• Plafon = jumlah kredit yang dicairkan. Baki debet = sisa pokok kredit di posisi terakhir (bisa lebih kecil dari plafon kalau sudah ada angsuran pokok).',
+        !empty($RL['gagal']) ? '• Realisasi kredit baru tidak dapat dihitung saat laporan ini dibuat.' : '',
     ]);
 
     $sh->getHeaderFooter()->setOddFooter('&L&8Tagihan AO v2&R&8Halaman &P dari &N');

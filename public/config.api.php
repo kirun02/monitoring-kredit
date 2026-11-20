@@ -18,6 +18,7 @@ return [
     'path_agunan'       => '/api_monitoring/Agunan',
     'path_telepon'      => '/api_monitoring/telepon',
     'path_promosi'      => '/api_monitoring/promosi',
+    'path_target'       => '/api_monitoring/Target_ao',
     'api_key'           => $_ENV['MON_API_KEY'],
     'secret_key'        => $_ENV['MON_API_SECRET'],
     'hmac_key'          => $_ENV['MON_API_HMAC'],
